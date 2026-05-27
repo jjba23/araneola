@@ -104,7 +104,7 @@
 (define* (araneola-crawl #:key parent-domain url)
   (let ((v-urls (visited-urls))
         (s (scriba-auto-logger)))
-    
+
     (unless (hash-ref v-urls url)
       (hash-set! v-urls url #t)
 
@@ -118,11 +118,13 @@
                                                         parent-domain
                                                         #:url url
                                                         #:sxml sxml)))))
-            
+
             (with-log-context `((link-count unquote
                                             (length links))
                                 (links unquote links))
-                              (log-info s "Found links"))
+                              (if (nil? links)
+                                  (log-debug s "No links found")
+                                  (log-info s "Found links")))
 
             (for-each (lambda (link)
                         (araneola-crawl #:parent-domain parent-domain
@@ -142,7 +144,7 @@
                               'url #f))
          (url (if (string-prefix? "https://" raw-url) raw-url
                   (string-append "https://" raw-url))))
-    
+
     (with-log-context `((url unquote url))
                       (log-info s "Araneola is starting"))
 
