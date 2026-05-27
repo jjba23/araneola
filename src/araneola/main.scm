@@ -28,12 +28,57 @@
   #:use-module (srfi srfi-13)
   #:use-module (ice-9 getopt-long)
   #:use-module (araneola sxml)
+  #:use-module (web client)
+  #:use-module (rnrs bytevectors)
+  #:use-module (htmlprag)
   #:use-module (scriba auto)
   #:use-module (scriba scriba)
   #:export (main))
 
-(define* (main #:key (args (command-line)))
+;; 1. Fetch the HTML
+(define (fetch-html-string url)
+  "Fetches the URL and returns the body as a UTF-8 string."
+  (let* ((response+body (call-with-values (lambda ()
+                                            (http-get url)) list))
+         (response (car response+body))
+         (body (cadr response+body)))
+    ;; http-get may return a bytevector depending on the server's Content-Type
+    (if (bytevector? body)
+        (utf8->string body) body)))
 
+;; 2 & 3. Parse and Extract SXML
+(define (extract-links sxml)
+  "Recursively walks the SXML tree and extracts all 'href' values from 'a' tags."
+  (let loop
+    ((tree sxml)
+     (acc '()))
+    (match tree
+      ;; Match an <a> tag that has an attributes list (@ ...)
+      (((quote a) ((quote @) attrs ...) . body) (let* ((href-pair (assq 'href
+                                                                        attrs))
+                                                       ;; Look for the href attribute
+                                                       (href-val (if href-pair
+                                                                  (cadr
+                                                                   href-pair)
+                                                                  #f)))
+                                                  ;; Extract the value
+                                                  (if href-val
+                                                      (loop body
+                                                            (cons href-val acc)) ;Add link and traverse children
+                                                      (loop body acc)))) ;No href, just traverse children
+      
+      ;; Match any other tag that has attributes (skip the attributes, traverse body)
+      ((tag ((quote @) attrs ...) . body) (loop body acc))
+
+      ;; Match standard nested lists (traverse the head, then the tail)
+      ((head . tail) (loop tail
+                           (loop head acc)))
+
+      ;; Base case: Ignore strings, symbols, or empty lists
+      (_ acc))))
+
+(define* (main #:key (args (command-line)))
+  
   (let* ((option-spec '((resources (single-char #\r)
                                    (value #t))
                         (url (single-char #\u)
@@ -42,6 +87,21 @@
          (options (getopt-long args option-spec))
          (resources (option-ref options
                                 'resources #f))
-         (s (scriba-auto-logger)))
-
-    (log-info s "Araneola is starting")))
+         (s (scriba-auto-logger))
+         (url (option-ref options
+                          'url #f)))
+    
+    (with-log-context `((url unquote url))
+                      (log-info s "Araneola is starting"))
+    (let* ((html (fetch-html-string url))
+           (sxml (html->sxml html))
+           ;; Reverse the output to get links in top-to-bottom document order
+           (links (reverse (extract-links sxml))))
+      
+      (with-log-context `((link-count unquote
+                                      (length links))
+                          (links unquote links))
+                        (log-info s "Found links"))
+      ;; (for-each (lambda (link)
+      ;; (display (string-append " - " link "\n"))) links)
+      )))
