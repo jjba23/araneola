@@ -64,6 +64,9 @@
                                                   (if href-val
                                                       (loop body
                                                             (cond
+                                                              ((equal? url
+                                                                href-val)
+                                                               acc)
                                                               ((string-prefix?
                                                                 url href-val)
                                                                (cons href-val
@@ -76,15 +79,30 @@
                                                                      acc))
                                                               (else acc)))
                                                       (loop body acc)))) ;No href, just traverse children
-
+      
       ((tag ((quote @) attrs ...) . body) (loop body acc))
 
       ((head . tail) (loop tail
                            (loop head acc)))
       (_ acc))))
 
-(define* (main #:key (args (command-line)))
+(define* (wl #:key logger url)
+  (let* ((html (fetch-html-string url))
+         (sxml (html->sxml html))
+         (links (reverse (extract-links #:url url
+                                        #:sxml sxml))))
+    
+    (with-log-context `((link-count unquote
+                                    (length links))
+                        (links unquote links))
+                      (log-info logger "Found links"))
 
+    (for-each (lambda (link)
+                (wl #:logger logger
+                    #:url link)) links)))
+
+(define* (main #:key (args (command-line)))
+  
   (let* ((option-spec '((resources (single-char #\r)
                                    (value #t))
                         (url (single-char #\u)
@@ -93,23 +111,14 @@
          (options (getopt-long args option-spec))
          (resources (option-ref options
                                 'resources #f))
-         (s (scriba-auto-logger))
+         (logger (scriba-auto-logger))
          (raw-url (option-ref options
                               'url #f))
          (url (if (string-prefix? "https://" raw-url) raw-url
                   (string-append "https://" raw-url))))
-
+    
     (with-log-context `((url unquote url))
-                      (log-info s "Araneola is starting"))
-    (let* ((html (fetch-html-string url))
-           (sxml (html->sxml html))
-           (links (reverse (extract-links #:url url
-                                          #:sxml sxml))))
+                      (log-info logger "Araneola is starting"))
 
-      (with-log-context `((link-count unquote
-                                      (length links))
-                          (links unquote links))
-                        (log-info s "Found links"))
-      ;; (for-each (lambda (link)
-      ;; (display (string-append " - " link "\n"))) links)
-      )))
+    (wl #:logger logger
+        #:url url)))
