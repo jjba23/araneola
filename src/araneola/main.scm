@@ -13,6 +13,7 @@
   #:use-module (ice-9 textual-ports)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
+  #:use-module (sxml simple)
   #:use-module (ice-9 getopt-long)
   #:use-module (web client)
   #:use-module (rnrs bytevectors)
@@ -129,6 +130,21 @@
                         (araneola-crawl #:parent-domain parent-domain
                                         #:url link)) links)))))))
 
+(define (write-sitemap sxml filename)
+  "Takes a SXML tree and writes a valid sitemap.xml using."
+  (let* ((out-port (open-output-file filename)))
+    (sxml->xml sxml out-port)
+    (close-port out-port)))
+
+(define (make-sitemap urls)
+  "Takes a list of URLs and writes a valid sitemap.xml using SXML."
+  (let* ((sitemap-sxml `(*TOP* (*PI* xml "version=\"1.0\" encoding=\"UTF-8\"")
+                               (urlset (@ (xmlns
+                                           "http://www.sitemaps.org/schemas/sitemap/0.9"))
+                                       ,@(map (lambda (url)
+                                                `(url (loc ,url))) urls)))))
+    sitemap-sxml))
+
 (define* (main #:key (args (command-line)))
   (let* ((option-spec '((resources (single-char #\r)
                                    (value #t))
@@ -154,4 +170,8 @@
                                             (hash-count (const #t)
                                                         (visited-urls))))
                         (log-info s "Links found"))
+      (write-sitemap (make-sitemap (hash-map->list (lambda (k v)
+                                                     k)
+                                                   (visited-urls)))
+                     "sitemap.xml")
       (log-info s "Araneola is stopping"))))
