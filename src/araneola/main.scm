@@ -46,8 +46,7 @@
     (if (bytevector? body)
         (utf8->string body) body)))
 
-;; 2 & 3. Parse and Extract SXML
-(define (extract-links sxml)
+(define* (extract-links #:key url sxml)
   "Recursively walks the SXML tree and extracts all 'href' values from 'a' tags."
   (let loop
     ((tree sxml)
@@ -64,9 +63,20 @@
                                                   ;; Extract the value
                                                   (if href-val
                                                       (loop body
-                                                            (cons href-val acc)) ;Add link and traverse children
+                                                            (cond
+                                                              ((string-prefix?
+                                                                url href-val)
+                                                               (cons href-val
+                                                                     acc))
+                                                              ((string-prefix?
+                                                                "/" href-val)
+                                                               (cons (string-append
+                                                                      url
+                                                                      href-val)
+                                                                     acc))
+                                                              (else acc)))
                                                       (loop body acc)))) ;No href, just traverse children
-      
+
       ((tag ((quote @) attrs ...) . body) (loop body acc))
 
       ((head . tail) (loop tail
@@ -74,7 +84,7 @@
       (_ acc))))
 
 (define* (main #:key (args (command-line)))
-  
+
   (let* ((option-spec '((resources (single-char #\r)
                                    (value #t))
                         (url (single-char #\u)
@@ -84,15 +94,18 @@
          (resources (option-ref options
                                 'resources #f))
          (s (scriba-auto-logger))
-         (url (option-ref options
-                          'url #f)))
-    
+         (raw-url (option-ref options
+                              'url #f))
+         (url (if (string-prefix? "https://" raw-url) raw-url
+                  (string-append "https://" raw-url))))
+
     (with-log-context `((url unquote url))
                       (log-info s "Araneola is starting"))
     (let* ((html (fetch-html-string url))
            (sxml (html->sxml html))
-           (links (reverse (extract-links sxml))))
-      
+           (links (reverse (extract-links #:url url
+                                          #:sxml sxml))))
+
       (with-log-context `((link-count unquote
                                       (length links))
                           (links unquote links))
