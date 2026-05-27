@@ -35,74 +35,85 @@
   #:use-module (scriba scriba)
   #:export (main))
 
-;; 1. Fetch the HTML
-(define (fetch-html-string url)
+(define* (fetch-html #:key parent-domain url)
   "Fetches the URL and returns the body as a UTF-8 string."
-  (let* ((response+body (call-with-values (lambda ()
-                                            (http-get url)) list))
+  (let* ((s (scriba-auto-logger))
+         (u (if (string-prefix? "/" url)
+                (string-append parent-domain url) url))
+         (_ (with-log-context `((url unquote u))
+                              (log-info s "Fetching HTML")))
+         (response+body (call-with-values (lambda ()
+                                            (http-get u)) list))
          (response (car response+body))
          (body (cadr response+body)))
     ;; http-get may return a bytevector depending on the server's Content-Type
     (if (bytevector? body)
         (utf8->string body) body)))
 
+(define* (is-interesting-url? #:key parent-domain url)
+  (cond
+    ((equal? "" url)
+     #f)
+    ((equal? "/" url)
+     #f)
+    ((equal? parent-domain url)
+     #f)
+    ((string-prefix? parent-domain url)
+     #t)
+    ((string-prefix? "/" url)
+     #t)
+    (else #f)))
+
 (define* (extract-links #:key url sxml)
-  "Recursively walks the SXML tree and extracts all 'href' values from 'a' tags."
+  "Recursively walks the SXML tree and extracts all interesting 'href' values from 'a' tags."
   (let loop
     ((tree sxml)
      (acc '()))
     (match tree
-      ;; Match an <a> tag that has an attributes list (@ ...)
       (((quote a) ((quote @) attrs ...) . body) (let* ((href-pair (assq 'href
                                                                         attrs))
-                                                       ;; Look for the href attribute
                                                        (href-val (if href-pair
                                                                   (cadr
                                                                    href-pair)
                                                                   #f)))
-                                                  ;; Extract the value
                                                   (if href-val
                                                       (loop body
-                                                            (cond
-                                                              ((equal? url
-                                                                href-val)
-                                                               acc)
-                                                              ((string-prefix?
-                                                                url href-val)
-                                                               (cons href-val
-                                                                     acc))
-                                                              ((string-prefix?
-                                                                "/" href-val)
-                                                               (cons (string-append
-                                                                      url
-                                                                      href-val)
-                                                                     acc))
-                                                              (else acc)))
-                                                      (loop body acc)))) ;No href, just traverse children
-      
+                                                            (if (is-interesting-url?
+                                                                 #:parent-domain
+                                                                 url
+                                                                 #:url
+                                                                 href-val)
+                                                                (cons href-val
+                                                                 acc) acc))
+                                                      (loop body acc))))
+
       ((tag ((quote @) attrs ...) . body) (loop body acc))
 
       ((head . tail) (loop tail
                            (loop head acc)))
       (_ acc))))
 
-(define* (wl #:key logger url)
-  (let* ((html (fetch-html-string url))
+(define crawled-links (make-parameter '()))
+
+(define* (araneola-crawl #:key parent-domain url)
+  (let* ((s (scriba-auto-logger))
+         (html (fetch-html #:parent-domain parent-domain
+                           #:url url))
          (sxml (html->sxml html))
          (links (reverse (extract-links #:url url
                                         #:sxml sxml))))
-    
+
     (with-log-context `((link-count unquote
                                     (length links))
                         (links unquote links))
-                      (log-info logger "Found links"))
+                      (log-info s "Found links"))
 
     (for-each (lambda (link)
-                (wl #:logger logger
-                    #:url link)) links)))
+                (araneola-crawl #:parent-domain parent-domain
+                                #:url link)) links)))
 
 (define* (main #:key (args (command-line)))
-  
+
   (let* ((option-spec '((resources (single-char #\r)
                                    (value #t))
                         (url (single-char #\u)
@@ -111,14 +122,14 @@
          (options (getopt-long args option-spec))
          (resources (option-ref options
                                 'resources #f))
-         (logger (scriba-auto-logger))
+         (s (scriba-auto-logger))
          (raw-url (option-ref options
                               'url #f))
          (url (if (string-prefix? "https://" raw-url) raw-url
                   (string-append "https://" raw-url))))
-    
-    (with-log-context `((url unquote url))
-                      (log-info logger "Araneola is starting"))
 
-    (wl #:logger logger
-        #:url url)))
+    (with-log-context `((url unquote url))
+                      (log-info s "Araneola is starting"))
+
+    (araneola-crawl #:parent-domain url
+                    #:url url)))
