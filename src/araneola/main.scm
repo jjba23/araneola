@@ -52,6 +52,8 @@
 
 (define* (is-interesting-url? #:key parent-domain url)
   (cond
+    ((string-contains url "../")
+     #f)
     ((or (equal? "" url)
          (equal? "/" url)
          (equal? parent-domain url))
