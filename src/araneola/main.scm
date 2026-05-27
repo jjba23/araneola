@@ -67,14 +67,10 @@
                                                             (cons href-val acc)) ;Add link and traverse children
                                                       (loop body acc)))) ;No href, just traverse children
       
-      ;; Match any other tag that has attributes (skip the attributes, traverse body)
       ((tag ((quote @) attrs ...) . body) (loop body acc))
 
-      ;; Match standard nested lists (traverse the head, then the tail)
       ((head . tail) (loop tail
                            (loop head acc)))
-
-      ;; Base case: Ignore strings, symbols, or empty lists
       (_ acc))))
 
 (define* (main #:key (args (command-line)))
@@ -95,7 +91,6 @@
                       (log-info s "Araneola is starting"))
     (let* ((html (fetch-html-string url))
            (sxml (html->sxml html))
-           ;; Reverse the output to get links in top-to-bottom document order
            (links (reverse (extract-links sxml))))
       
       (with-log-context `((link-count unquote
