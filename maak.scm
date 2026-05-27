@@ -89,7 +89,7 @@
 (define (package-docker)
   "Create a Docker image for ARANEOLA."
   ($ '("guix pack --file=./guix.scm" "--format=docker" "--image-tag=araneola"
-       "-S /bin=bin" "bash coreutils util-linux-with-udev guile imagemagick")
+       "-S /bin=bin" "bash coreutils util-linux-with-udev guile")
      #:verbose? #t))
 
 (define (push-docker-latest)
