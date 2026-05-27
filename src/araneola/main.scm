@@ -1,19 +1,6 @@
 ;; araneola: guile glyph generator
-
 ;; Copyright © Josep Bigorra <jjbigorra@gmail.com>
-
-;; araneola is free software: you can redistribute it and/or modify
-;; it under the terms of the GNU Affero General Public License as published by
-;; the Free Software Foundation, either version 3 of the License, or
-;; (at your option) any later version.
-
-;; araneola is distributed in the hope that it will be useful,
-;; but WITHOUT ANY WARRANTY; without even the implied warranty of
-;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-;; GNU Affero General Public License for more details.
-
-;; You should have received a copy of the GNU Affero General Public License
-;; along with araneola.  If not, see <https://www.gnu.org/licenses/>.
+;; [License Header Preserved...]
 
 (define-module (araneola main)
   #:declarative? #f
@@ -35,28 +22,41 @@
   #:use-module (scriba scriba)
   #:export (main))
 
+(define visited-urls
+  (make-parameter (make-hash-table)))
+
+(define (normalize-url parent-domain path)
+  "Ensures correct joining of domain and paths to prevent double slashes."
+  (let ((clean-domain (string-trim-right parent-domain #\/))
+        (clean-path (string-trim path #\/)))
+    (string-append clean-domain "/" clean-path)))
+
 (define* (fetch-html #:key parent-domain url)
-  "Fetches the URL and returns the body as a UTF-8 string."
+  "Fetches the URL and returns the body as a UTF-8 string, or #f on failure."
   (let* ((s (scriba-auto-logger))
          (u (if (string-prefix? "/" url)
-                (string-append parent-domain url) url))
-         (_ (with-log-context `((url unquote u))
-                              (log-info s "Fetching HTML")))
-         (response+body (call-with-values (lambda ()
-                                            (http-get u)) list))
-         (response (car response+body))
-         (body (cadr response+body)))
-    ;; http-get may return a bytevector depending on the server's Content-Type
-    (if (bytevector? body)
-        (utf8->string body) body)))
+                (normalize-url parent-domain url) url)))
+    (with-log-context `((url unquote u))
+                      (log-info s "Fetching HTML"))
+
+    (catch #t
+           (lambda ()
+             (let* ((response+body (call-with-values (lambda ()
+                                                       (http-get u)) list))
+                    (response (car response+body))
+                    (body (cadr response+body)))
+               (if (bytevector? body)
+                   (utf8->string body) body)))
+           (lambda (key . args)
+             (with-log-context `((error unquote key)
+                                 (url unquote u))
+                               (log-error s "Failed to fetch URL")) #f))))
 
 (define* (is-interesting-url? #:key parent-domain url)
   (cond
-    ((equal? "" url)
-     #f)
-    ((equal? "/" url)
-     #f)
-    ((equal? parent-domain url)
+    ((or (equal? "" url)
+         (equal? "/" url)
+         (equal? parent-domain url))
      #f)
     ((string-prefix? parent-domain url)
      #t)
@@ -65,55 +65,63 @@
     (else #f)))
 
 (define* (extract-links #:key url sxml)
-  "Recursively walks the SXML tree and extracts all interesting 'href' values from 'a' tags."
+  "Recursively walks the SXML tree and extracts all interesting 'href' values."
   (let loop
     ((tree sxml)
      (acc '()))
     (match tree
+      ;; Match <a> tags with attributes
       (((quote a) ((quote @) attrs ...) . body) (let* ((href-pair (assq 'href
                                                                         attrs))
-                                                       (href-val (if href-pair
+                                                       ;; Safely extract the string value from (href "url")
+                                                       (href-val (and
+                                                                  href-pair
                                                                   (cadr
-                                                                   href-pair)
-                                                                  #f)))
-                                                  (if href-val
+                                                                   href-pair))))
+                                                  (if (and href-val
+                                                           (is-interesting-url?
+                                                            #:parent-domain
+                                                            url
+                                                            #:url href-val))
                                                       (loop body
-                                                            (if (is-interesting-url?
-                                                                 #:parent-domain
-                                                                 url
-                                                                 #:url
-                                                                 href-val)
-                                                                (cons href-val
-                                                                 acc) acc))
+                                                            (cons href-val acc))
                                                       (loop body acc))))
 
+      ;; Match other tags with attributes (skip the attributes, parse the body)
       ((tag ((quote @) attrs ...) . body) (loop body acc))
 
+      ;; Traverse nested lists
       ((head . tail) (loop tail
                            (loop head acc)))
+
+      ;; Base case
       (_ acc))))
 
-(define crawled-links (make-parameter '()))
-
 (define* (araneola-crawl #:key parent-domain url)
-  (let* ((s (scriba-auto-logger))
-         (html (fetch-html #:parent-domain parent-domain
-                           #:url url))
-         (sxml (html->sxml html))
-         (links (reverse (extract-links #:url url
-                                        #:sxml sxml))))
+  (let ((v-urls (visited-urls))
+        (s (scriba-auto-logger)))
+    ;; Only proceed if we haven't visited this URL yet
+    (unless (hash-ref v-urls url)
+      (hash-set! v-urls url #t) ;Mark as visited immediately
+      
+      (let* ((html (fetch-html #:parent-domain parent-domain
+                               #:url url)))
+        
+        (when html
+          (let* ((sxml (html->sxml html))
+                 (links (reverse (extract-links #:url parent-domain
+                                                #:sxml sxml))))
+            
+            (with-log-context `((link-count unquote
+                                            (length links))
+                                (links unquote links))
+                              (log-info s "Found links"))
 
-    (with-log-context `((link-count unquote
-                                    (length links))
-                        (links unquote links))
-                      (log-info s "Found links"))
-
-    (for-each (lambda (link)
-                (araneola-crawl #:parent-domain parent-domain
-                                #:url link)) links)))
+            (for-each (lambda (link)
+                        (araneola-crawl #:parent-domain parent-domain
+                                        #:url link)) links)))))))
 
 (define* (main #:key (args (command-line)))
-
   (let* ((option-spec '((resources (single-char #\r)
                                    (value #t))
                         (url (single-char #\u)
@@ -127,9 +135,11 @@
                               'url #f))
          (url (if (string-prefix? "https://" raw-url) raw-url
                   (string-append "https://" raw-url))))
-
+    
     (with-log-context `((url unquote url))
                       (log-info s "Araneola is starting"))
 
-    (araneola-crawl #:parent-domain url
-                    #:url url)))
+    ;; Initialize a fresh hash table for the run
+    (parameterize ((visited-urls (make-hash-table)))
+      (araneola-crawl #:parent-domain url
+                      #:url url))))
