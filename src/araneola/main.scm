@@ -31,18 +31,16 @@
         (clean-path (string-trim path #\/)))
     (string-append clean-domain "/" clean-path)))
 
-(define* (fetch-html #:key parent-domain url)
+(define* (fetch-html #:key url)
   "Fetches the URL and returns the body as a UTF-8 string, or #f on failure."
-  (let* ((s (scriba-auto-logger))
-         (u (if (string-prefix? "/" url)
-                (normalize-url parent-domain url) url)))
-    (with-log-context `((url unquote u))
+  (let* ((s (scriba-auto-logger)))
+    (with-log-context `((url unquote url))
                       (log-info s "Fetching HTML"))
 
     (catch #t
            (lambda ()
              (let* ((response+body (call-with-values (lambda ()
-                                                       (http-get u)) list))
+                                                       (http-get url)) list))
                     (response (car response+body))
                     (body (cadr response+body)))
                (if (bytevector? body)
@@ -64,7 +62,7 @@
      #t)
     (else #f)))
 
-(define* (extract-links #:key url sxml)
+(define* (extract-links #:key parent-domain url sxml)
   "Recursively walks the SXML tree and extracts all interesting 'href' values."
   (let loop
     ((tree sxml)
@@ -73,7 +71,6 @@
       ;; Match <a> tags with attributes
       (((quote a) ((quote @) attrs ...) . body) (let* ((href-pair (assq 'href
                                                                         attrs))
-                                                       ;; Safely extract the string value from (href "url")
                                                        (href-val (and
                                                                   href-pair
                                                                   (cadr
@@ -81,10 +78,17 @@
                                                   (if (and href-val
                                                            (is-interesting-url?
                                                             #:parent-domain
-                                                            url
+                                                            parent-domain
                                                             #:url href-val))
                                                       (loop body
-                                                            (cons href-val acc))
+                                                            (cons (if (string-prefix?
+                                                                       "/"
+                                                                       href-val)
+                                                                   (normalize-url
+                                                                    parent-domain
+                                                                    href-val)
+                                                                   href-val)
+                                                                  acc))
                                                       (loop body acc))))
 
       ;; Match other tags with attributes (skip the attributes, parse the body)
@@ -100,17 +104,20 @@
 (define* (araneola-crawl #:key parent-domain url)
   (let ((v-urls (visited-urls))
         (s (scriba-auto-logger)))
-    ;; Only proceed if we haven't visited this URL yet
+    
     (unless (hash-ref v-urls url)
-      (hash-set! v-urls url #t) ;Mark as visited immediately
-      
-      (let* ((html (fetch-html #:parent-domain parent-domain
-                               #:url url)))
-        
+      (hash-set! v-urls url #t)
+
+      (let ((html (fetch-html #:url url)))
         (when html
           (let* ((sxml (html->sxml html))
-                 (links (reverse (extract-links #:url parent-domain
-                                                #:sxml sxml))))
+                 (links (reverse (filter (lambda (l)
+                                           ;; Only keep links we have NOT visited
+                                           (not (hash-ref v-urls l)))
+                                         (extract-links #:parent-domain
+                                                        parent-domain
+                                                        #:url url
+                                                        #:sxml sxml)))))
             
             (with-log-context `((link-count unquote
                                             (length links))
@@ -139,7 +146,11 @@
     (with-log-context `((url unquote url))
                       (log-info s "Araneola is starting"))
 
-    ;; Initialize a fresh hash table for the run
     (parameterize ((visited-urls (make-hash-table)))
       (araneola-crawl #:parent-domain url
-                      #:url url))))
+                      #:url url)
+      (with-log-context `((total-link-count unquote
+                                            (hash-count (const #t)
+                                                        (visited-urls))))
+                        (log-info s "Links found"))
+      (log-info s "Araneola is stopping"))))
