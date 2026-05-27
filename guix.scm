@@ -85,11 +85,19 @@ and compile-time macros.")
                 (install-file "scripts/araneola" bin)
                 (install-file "scripts/log.bash"
                               (string-append share "/scripts/"))
-                (chmod (string-append bin "/araneola") #o755)))))))
+                (chmod (string-append bin "/araneola") #o755))))
+
+          (add-after 'install-program-files 'wrap-executable
+            (lambda _
+              (wrap-program (string-append #$output "/bin/araneola")
+                `("GUILE_LOAD_PATH" ":" prefix
+                  (,(getenv "GUILE_LOAD_PATH")))
+                `("GUILE_LOAD_COMPILED_PATH" ":" prefix
+                  (,(getenv "GUILE_LOAD_COMPILED_PATH")))))))))
+
     (build-system guile-build-system)
-    (propagated-inputs (list guile-scriba))
     (native-inputs (list guile-3.0))
-    (inputs (list guile-3.0 bash-minimal))
+    (inputs (list guile-3.0 bash-minimal guile-scriba))
     (synopsis "")
     (description "")
     (home-page "https://codeberg.org/jjba23/araneola")
