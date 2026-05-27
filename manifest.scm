@@ -32,6 +32,7 @@
              (gnu packages texinfo)
              (gnu packages autotools)
              (gnu packages rust-apps)
+             (gnu packages tls)
              ((guix licenses)
               #:prefix license:))
 
@@ -71,5 +72,7 @@ and compile-time macros.")
                           watchexec
                           guile-documenta
                           texinfo
+                          guile-lib
+                          guile-gnutls
                           guile-scriba
                           guile-ares-rs))

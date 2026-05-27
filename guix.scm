@@ -26,6 +26,7 @@
              (gnu packages)
              (gnu packages bash)
              (gnu packages guile)
+             (gnu packages tls)
              (gnu packages guile-xyz))
 
 (define-public guile-scriba
@@ -97,7 +98,7 @@ and compile-time macros.")
 
     (build-system guile-build-system)
     (native-inputs (list guile-3.0))
-    (inputs (list guile-3.0 bash-minimal guile-scriba))
+    (inputs (list guile-3.0 bash-minimal guile-scriba guile-lib guile-gnutls))
     (synopsis "")
     (description "")
     (home-page "https://codeberg.org/jjba23/araneola")
