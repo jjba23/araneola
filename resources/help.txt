@@ -1,0 +1,16 @@
+
++----------------------------------------------------------------------------+
+Araneola
+    Sitemap generator
+
+    See more at: https://codeberg.org/jjba23/araneola
+    Software licensed under the GNU AGPL v3 or newer.
+
+USAGE: araneola [OPTIONS]
+OPTIONS:
+    TODO
+
+    -h, --help
+        Display this help message and exit.
+
++----------------------------------------------------------------------------+

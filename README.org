@@ -1,0 +1,200 @@
+#+title: GGG: Guile Glyph Generator
+#+author: Josep Bigorra
+#+email: jjbigorra@gmail.com
+#+language: en
+
+[[./dist/scheme-guile.svg]]  [[./dist/gnu-guix.svg]]   [[./dist/license-agpl3+.svg]]  [[./dist/license-fdl13+.svg]]
+[[./dist/jointhefreeworld-org.svg]] [[./dist/maak.svg]]
+
+/Generate SVG images for handy useful glyphs, Org/Markdown badges and more, leveraging the power of Lisp (Guile Scheme)/
+
+Be proud and appreciate technologies and techniques you use, distinguish clearly supported versions of things, etc.
+
+With flexible support for badges between ONE and THREE parts.
+
+If you like my work, please support me by [[https://bmc.link/jjbigorra][buying me a cup of coffee ☕]] so I can continue with a lot of motivation.
+
+---------------
+
+/Tired of bland, static status badges for your projects?/
+
+Say hello to the *Guile Glyph Generator (GGG)*, a small but mighty tool crafted in the elegant λ Lisp (Guile Scheme) programming language.
+
+Based on the provided Lisp configuration, GGG will produce something like the following badges (1-3 part) (as both SVG and PNG files).
+
+[[./dist/haskell-ghc910.svg]] [[./dist/gnu-emacs.svg]]  [[./dist/pipeline-succeeded.svg]] [[./dist/scala-213.svg]]  [[./dist/shell-fish.svg]]  [[./dist/shell-eshell.svg]]
+[[./dist/css-tailwind4.svg]]  [[./dist/gnu-artanis.svg]] [[./dist/gnu-emacs-single.svg]] [[./dist/gnu-artanis-122.svg]] [[./dist/i18n-gnu-gettext.svg]]
+
+
+----------
+* What is this black magic? 🪄
+
+Through SVG generation from Lisp (Guile Scheme) we leverage a beautiful DSL (Domain-Specific Language) and apply some mathematical knowledge to build pixel perfect badges.
+
+The SVG (Scalable Vector Graphics) can then be easily converted without quality loss to any desired format. Create your badges programatically with a polished aesthetic!
+
+-  Scheme Powered :: Built with the expressive and functional Guile Scheme, ensuring a concise and maintainable codebase.
+-  Vector Graphics (SVG) :: Generates crisp and scalable SVG images, perfect for any screen resolution.
+-  Raster Images (PNG) :: Also produces PNG versions for broader compatibility.
+-  Highly Customizable :: Customize the text, background colors, text colors, logos, etc.
+-  Simple Definition :: Badge configurations are defined in an easy-to-understand data structure within the Scheme code.
+
+ggg dynamically estimates text width for the elements, specially text, looking up a rough width per character based on the font size. Then, multiplies this by the number of characters and add some padding. Finally, we slightly adjust the width based on whether the text is very short, short, medium, or long to make the badge look better.
+
+ggg tries to provide sensible defaults to every option, but allow customization. We construct the SVG structure using SXML (S-expressions representing XML). This makes it easy to define the SVG elements and their attributes programmatically. 
+
+We choose for ~geometricPrecision~ in SVG to allow highest quality and fidelity, to prioritize geometric accuracy over rendering speed. This is often desirable for crisp, clean vector graphics like badges. In essence, the "magic" lies in the combination of:
+
+- Data-driven generation :: The badge is created based on the input data.
+- Precise calculations :: The dimensions and positions of elements are precisely calculated to achieve the desired layout.
+- Using SVG effectively :: Standard SVG elements and attributes are used in a structured way to create the visual appearance.
+- Abstraction :: of layout and view thanks to Lisp, handling all options gracefully.
+
+----------
+
+* How to define a glyph?
+
+The module where you define your glyphs should be ~(ggg config)~ as that is used to read config dynamically from. See ~glyphs/jjba23.scm~ for an example.
+
+#+begin_src scheme
+(define-module (ggg config)
+  #:declarative? #t)
+#+end_src
+
+Defining your glyphs is simple and only requires very basic knowledge of Lisp/Scheme:
+
+#+begin_src scheme
+(define my-scheme-guile-glyph
+  `((sections ((background . "#555") (text . "Scheme")
+               (color . "#fff")
+               (logo . lambda))
+              ((background . "#d0730f") (text . "Guile")
+               (color . "#fff")))
+    (id . scheme-guile)))
+
+#+end_src
+
+Then to ensure that ggg will read your glyphs from the file, you need to export them in the ~ggg-glyphs~ list:
+
+#+begin_src scheme
+(define ggg-glyphs
+  (list my-scheme-guile-glyph))
+#+end_src
+
+As for the ~logo~ value, ggg has a selection of free-licensed logo data in the ~resources/svg-paths~ directory, feel free to contribute new ones!
+
+* Help
+
+The project's automation is done using [[https://codeberg.org/jjba23/maak][Maak]] , check the ~maak.scm~ file.
+
+Also, find the technical Guile Scheme API documentation for GGG here:
+
+https://jointhefreeworld.org/api-docs/ggg/API.html
+
+You can see the program's help by invoking it with the ~--help~ argument or looking at ~resources/help.txt~. 
+
+* Installing
+
+ggg is officially distributed via:
+- Guix package manager
+- Podman/Docker images.
+
+/That being said, feel free to use it as you wish, within the terms of the GNU Affero General Public License v3 or newer./  
+
+** On Guix
+
+ You can alternatively choose to download it from source, useful for developing it or customizing it. In that case you'll need:
+
+- *Guix*: The Guix package manager will ensure a reproducible working software, and will manage all needed dependencies for you.
+-  *Guile Scheme:*  This entire program is written using the official GNU extension language, Guile Scheme.
+-  *ImageMagick:* If you want to generate PNG files, you'll need ImageMagick (specifically the ~convert~ command).
+
+Check the ~maak.scm~, ~Makefile~ and the ~guix.scm~ and ~manifest.scm~ for more details.
+
+For example, to enter an environment shell with ggg temporarily you can use:
+#+begin_src shell
+guix shell -f guix.scm
+#+end_src
+
+You can also chain commands to it:
+#+begin_src shell
+guix shell -f guix.scm -- ggg --help
+#+end_src
+
+ggg offers a ~--help~ / ~-h~ flag which will explain all options (also visible in ~resources/help.txt~). You should point ggg to the path to your configuration file:
+
+#+begin_src shell
+ggg --file ./glyphs/jjba23.scm --destination ./dist
+#+end_src
+
+** On Podman/Docker
+
+ggg is also available as a Docker container, from DockerHub (also compatible with Podman).
+
+https://hub.docker.com/repository/docker/jjba23/ggg/general
+
+You can also build images of ggg yourself, using ~guix pack~. See the ~maak.scm~ file for more.
+To load these tarball images, you can do ~podman load < my.tar.gz~
+
+You can run ggg from the container, and bind your local filesystem to give access, for example:
+
+#+begin_src shell
+ docker container run -v /home/joe:/home/joe \
+     docker.io/jjba23/ggg:latest ggg --file /home/joe/glyphs.scm --destination ./dist
+#+end_src
+
+--------
+
+* Licensing
+
+
+ggg and all of its source code are free software, licensed under the GNU Affero General Public License v3 (or newer at your convenience).
+
+https://www.gnu.org/licenses/agpl-3.0.html
+
+The documentation and examples, including this document, which are provided with ggg, are all licensed under the GNU Free Documentation License v1.3 (or newer at your convenience).
+
+https://www.gnu.org/licenses/fdl-1.3.html
+
+
+---------
+
+* REPL: Interactive workflow, developer power
+
+A REPL (Read-Eval-Print Loop) is an interactive environment, which can be used connected to your console, running application, language compiler and more, which gives you superpowers as an engineer 🦸🏼.
+
+Lisp dialects, more specifically Guile Scheme, have great support for this. I personally of course like to do this with [[https://guix.gnu.org/][Guix]], [[https://www.gnu.org/software/emacs/][Emacs]], ([[https://git.sr.ht/~abcdw/emacs-arei][Arei/Ares]] + [[https://github.com/vspinu/sesman][sesman]]) you can get an ultimate extensible powerful editor experience, miles ahead of traditional IDEs 🐂 .
+
+It fundamentally changes the development workflow by eliminating the slow /edit, save, compile, run/ cycle. Instead of writing a whole program and then running it to see what happens, you get a fast, conversational workflow. What does this mean for in practice?
+
+- *Incremental Development:* Write, test, inspect, evaluate one function or even one line at a time. Get immediate feedback without running the entire app.
+- *Powerful Debugging:* Forget adding ~print~ statements and restarting. You can pause, inspect objects, change values, and even redefine a broken function on the fly to test a fix in any environment (yes even in production, while running).
+- *Fast Prototyping & Learning:* Instantly experiment with a new library or API. Just load it and start calling functions to see how they work, which is much faster than only reading documentation.
+
+When integrated into your code editor, you can execute any piece of code (a line, a selection, or a file) with a keyboard shortcut and see the result instantly, creating a seamless and powerful development experience.
+
+
+-----------
+
+
+* Code of conduct
+
+This project adheres to the jointhefreeworld code of conduct. Find it here:
+
+https://jointhefreeworld.org/blog/articles/personal/jointhefreeworld-code-of-conduct/index.html
+
+In summary, we foster an inclusive, respectful, and cooperative environment for all contributors and users of this free software project. Inspired by the ideals of the GNU Project, we strive to uphold freedom, equality, and community as guiding principles. We believe that collaboration in a community of mutual respect is essential to creating excellent free software.
+
+---------
+
+* GGG Project
+
+Contributing to free software is a uniquely beautiful act because it embodies principles of generosity, collaboration, and empowerment.
+
+We welcome everyone to feel invited to the ggg Project, and encourage active contribution in all forms, to improve it and/or suggest improvements, brainstorm with me, make it more modular/flexible, etc, feel free to contact me <jjbigorra@gmail.com> to chat, discuss or report feedback.
+
+Find here the Backlog and Kanban boards for ggg: https://lucidplan.jointhefreeworld.org/tickets/ggg
+
+
+-------
+
