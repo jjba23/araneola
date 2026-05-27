@@ -3,7 +3,7 @@
 ;; [License Header Preserved...]
 
 (define-module (araneola main)
-  #:declarative? #f
+  #:declarative? #t
   #:use-module (ice-9 format)
   #:use-module (ice-9 iconv)
   #:use-module (ice-9 match)
@@ -14,7 +14,6 @@
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-13)
   #:use-module (ice-9 getopt-long)
-  #:use-module (araneola sxml)
   #:use-module (web client)
   #:use-module (rnrs bytevectors)
   #:use-module (htmlprag)
