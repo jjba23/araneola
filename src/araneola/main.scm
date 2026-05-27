@@ -35,7 +35,10 @@
 (define* (main #:key (args (command-line)))
 
   (let* ((option-spec '((resources (single-char #\r)
-                                   (value #t))))
+                                   (value #t))
+                        (url (single-char #\u)
+                             (value #t)
+                             (required? #t))))
          (options (getopt-long args option-spec))
          (resources (option-ref options
                                 'resources #f))

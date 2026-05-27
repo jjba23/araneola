@@ -108,10 +108,11 @@
 
 (define (dev-run)
   (time-machine-manifest-shell '("guile -L ./src -c '((@(araneola main) main))'"
-                    "--resources ./resources")))
+                    "--resources ./resources"
+                    "--url jointhefreeworld.org")))
 
 (define (run)
-  (time-machine-program-shell '("araneola")))
+  (time-machine-program-shell '("araneola" "--url jointhefreeworld.org")))
 
 (define (hot-reload)
   "Hot-reloading developer's setup."
