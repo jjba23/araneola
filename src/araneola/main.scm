@@ -115,7 +115,7 @@
 (define* (araneola-crawl #:key parent-domain url)
   (let ((v-urls (visited-urls))
         (s (scriba-auto-logger)))
-
+    
     (unless (hash-ref v-urls url)
       (let ((d (fetch-html #:url url)))
         (hash-set! v-urls url
@@ -133,7 +133,7 @@
                                                         parent-domain
                                                         #:url url
                                                         #:sxml sxml)))))
-
+            
             (with-log-context `((link-count unquote
                                             (length links))
                                 (links unquote links))
@@ -151,13 +151,32 @@
     (sxml->xml sxml out-port)
     (close-port out-port)))
 
+(use-modules (srfi srfi-1))
+ ; Required for 'filter' if using Guile
+
 (define (make-sitemap urls)
   "Takes a list of URLs and writes a valid sitemap.xml using SXML."
-  (let* ((sitemap-sxml `(*TOP* (*PI* xml "version=\"1.0\" encoding=\"UTF-8\"")
+  (let* ((xs (hash-map->list (lambda (k v)
+                               (append v
+                                       `((url unquote k))))
+                             (visited-urls)))
+         
+         (valid-xs (filter (lambda (x)
+                             (assq-ref x
+                                       'url)) xs))
+
+         (sitemap-sxml `(*TOP* (*PI* xml "version=\"1.0\" encoding=\"UTF-8\"")
                                (urlset (@ (xmlns
                                            "http://www.sitemaps.org/schemas/sitemap/0.9"))
-                                       ,@(map (lambda (url)
-                                                `(url (loc ,url)(lastmod ,url))) urls)))))
+                                       ,@(map (lambda (x)
+                                                (let ((url (assq-ref x
+                                                                     'url))
+                                                      (lastmod (assq-ref x
+                                                                         'last-modified)))
+                                                  `(url (loc ,url)
+                                                        ,@(if lastmod
+                                                              `((lastmod ,lastmod))
+                                                              '())))) valid-xs)))))
     sitemap-sxml))
 
 (define* (main #:key (args (command-line)))
@@ -174,7 +193,7 @@
                               'url #f))
          (url (if (string-prefix? "https://" raw-url) raw-url
                   (string-append "https://" raw-url))))
-
+    
     (with-log-context `((url unquote url))
                       (log-info s "Araneola is starting"))
 
@@ -185,8 +204,5 @@
                                             (hash-count (const #t)
                                                         (visited-urls))))
                         (log-info s "Links found"))
-      (write-sitemap (make-sitemap (hash-map->list (lambda (k v)
-                                                     k)
-                                                   (visited-urls)))
-                     "sitemap.xml")
+      (write-sitemap (make-sitemap (visited-urls)) "sitemap.xml")
       (log-info s "Araneola is stopping"))))
