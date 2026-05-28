@@ -16,8 +16,10 @@
   #:use-module (sxml simple)
   #:use-module (ice-9 getopt-long)
   #:use-module (web client)
+  #:use-module (web response)
   #:use-module (rnrs bytevectors)
   #:use-module (htmlprag)
+  #:use-module (srfi srfi-19)
   #:use-module (scriba auto)
   #:use-module (scriba scriba)
   #:export (main))
@@ -42,12 +44,19 @@
              (let* ((response+body (call-with-values (lambda ()
                                                        (http-get url)) list))
                     (response (car response+body))
-                    (body (cadr response+body)))
+                    (body (cadr response+body))
+                    (raw-lm (response-last-modified response #f))
+                    (last-modified (if raw-lm
+                                       (date->string raw-lm "~Y-~m-~d") #f)))
                (if (bytevector? body)
-                   (utf8->string body) body)))
+                   `((body unquote
+                           (utf8->string body))
+                     (last-modified unquote last-modified))
+                   `((body unquote body)
+                     (last-modified unquote last-modified)))))
            (lambda (key . args)
              (with-log-context `((error unquote key)
-                                 (url unquote u))
+                                 (url unquote url))
                                (log-error s "Failed to fetch URL")) #f))))
 
 (define* (is-interesting-url? #:key parent-domain url)
@@ -108,11 +117,15 @@
         (s (scriba-auto-logger)))
 
     (unless (hash-ref v-urls url)
-      (hash-set! v-urls url #t)
-
-      (let ((html (fetch-html #:url url)))
-        (when html
-          (let* ((sxml (html->sxml html))
+      (let ((d (fetch-html #:url url)))
+        (hash-set! v-urls url
+                   `((visited . #t) (last-modified unquote
+                                                   (assq-ref d
+                                                             'last-modified))))
+        (when (assq-ref d
+                        'body)
+          (let* ((sxml (html->sxml (assq-ref d
+                                             'body)))
                  (links (reverse (filter (lambda (l)
                                            ;; Only keep links we have NOT visited
                                            (not (hash-ref v-urls l)))
@@ -144,7 +157,7 @@
                                (urlset (@ (xmlns
                                            "http://www.sitemaps.org/schemas/sitemap/0.9"))
                                        ,@(map (lambda (url)
-                                                `(url (loc ,url))) urls)))))
+                                                `(url (loc ,url)(lastmod ,url))) urls)))))
     sitemap-sxml))
 
 (define* (main #:key (args (command-line)))
