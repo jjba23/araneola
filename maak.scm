@@ -37,6 +37,9 @@
 (define hot-reload-file-types
   '(scm))
 
+(define sitemap-domain
+  (make-parameter "https://wikimusic.jointhefreeworld.org"))
+
 ;; ====== Maak abstractions ======
 
 (define (syscall-with-output cmd)
@@ -62,14 +65,16 @@
 (define (repl)
   "Development REPL."
   (time-machine-manifest-shell '("guile -L ./src"
-                    "-c '((@ (ares server) run-nrepl-server))'")))
+                                 "-c '((@ (ares server) run-nrepl-server))'")))
 
 (define (docs)
   "Generate technical API documentation for Maak."
   (delete-file-recursively "doc")
-  (time-machine-manifest-shell (list (~ "documenta api ./src/~a && " project-name)
-                        (~ "texi2any -v --html --css-ref=~a" api-docs-css-url)
-                        "./doc/api/index.texi"))
+  (time-machine-manifest-shell (list (~ "documenta api ./src/~a && "
+                                        project-name)
+                                     (~ "texi2any -v --html --css-ref=~a"
+                                        api-docs-css-url)
+                                     "./doc/api/index.texi"))
   (mv "./index" "./doc/api-dist"))
 
 (define (deploy)
@@ -107,12 +112,14 @@
        #:verbose? #t)))
 
 (define (dev-run)
-  (time-machine-manifest-shell '("guile -L ./src -c '((@(araneola main) main))'"
-                    "--resources ./resources"
-                    "--url jointhefreeworld.org")))
+  (time-machine-manifest-shell (list
+                                "guile -L ./src -c '((@(araneola main) main))'"
+                                "--resources ./resources" "--url"
+                                (sitemap-domain))))
 
 (define (run)
-  (time-machine-program-shell '("araneola" "--url jointhefreeworld.org")))
+  (time-machine-program-shell (list "araneola" "--url"
+                                    (sitemap-domain))))
 
 (define (hot-reload)
   "Hot-reloading developer's setup."
