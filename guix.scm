@@ -32,7 +32,7 @@
 (define-public guile-scriba
   (package
     (name "guile-scriba")
-    (version "0.0.8")
+    (version "0.1.2")
     (source
      (origin
        (method git-fetch)
@@ -41,7 +41,7 @@
              (commit (string-append "v" version))))
        (file-name (git-file-name name version))
        (sha256
-        (base32 "0bz8i2nkq0bvizsj2g15x8m11zb0gbfs36dfnilj7v19czzswbln"))))
+        (base32 "1chhbhy21g6zghc3alpqhvb6nizylmzzapjariykv41f47ynhljs"))))
     (propagated-inputs (list guile-json-4))
     (build-system guile-build-system)
     (native-inputs (list guile-3.0))
