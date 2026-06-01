@@ -53,7 +53,7 @@
                  (response (car response+body))
                  (body (cadr response+body))
                  (status (response-code response)))
-            
+
             (cond
               ((or (= status 301)
                    (= status 302))
@@ -68,7 +68,6 @@
                            (last-modified (if raw-lm
                                               (date->string raw-lm "~Y-~m-~d")
                                               #f)))
-                      (log-info s "Response: ~a" response)
                       (unless (eq? status 200)
                         (with-log-context `((status unquote status))
                                           (log-info s "Received HTTP status")))
@@ -81,17 +80,18 @@
 
     (catch #t
            (lambda ()
-             (do-fetch initial-uri 3))
+             (do-fetch initial-uri 5))
            (lambda (key . args)
              (if (eq? key
                       'http-error)
-                 (apply throw key args)
                  (begin
                    (with-log-context `((error unquote key)
+                                       (details unquote args)
                                        (url unquote url))
                                      (log-error s "Failed to fetch URL")) #f))))))
 
 (define* (is-interesting-url? #:key parent-domain url)
+  "Validates if the fully qualified URL belongs to the target domain."
   (cond
     ((string-contains url "../")
      #f)
@@ -101,8 +101,6 @@
      #f)
     ((string-prefix? parent-domain url)
      #t)
-    ((string-prefix? "/" url)
-     #t)
     (else #f)))
 
 (define* (extract-links #:key parent-domain url sxml)
@@ -111,43 +109,48 @@
     ((tree sxml)
      (acc '()))
     (match tree
-      ;; Match <a> tags with attributes
       (((quote a) ((quote @) attrs ...) . body) (let* ((href-pair (assq 'href
                                                                         attrs))
-                                                       (href-val (and
+                                                       (raw-href (and
                                                                   href-pair
                                                                   (cadr
-                                                                   href-pair))))
+                                                                   href-pair)))
+                                                       (href-val (and raw-href
+                                                                  (cond
+                                                                    ((string-prefix?
+                                                                      "//"
+                                                                      raw-href)
+                                                                     (string-append
+                                                                      "https:"
+                                                                      raw-href))
+                                                                    ((string-prefix?
+                                                                      "/"
+                                                                      raw-href)
+                                                                     (normalize-url
+                                                                      parent-domain
+                                                                      raw-href))
+                                                                    (else
+                                                                     raw-href)))))
                                                   (if (and href-val
                                                            (is-interesting-url?
                                                             #:parent-domain
                                                             parent-domain
                                                             #:url href-val))
                                                       (loop body
-                                                            (cons (if (string-prefix?
-                                                                       "/"
-                                                                       href-val)
-                                                                   (normalize-url
-                                                                    parent-domain
-                                                                    href-val)
-                                                                   href-val)
-                                                                  acc))
+                                                            (cons href-val acc))
                                                       (loop body acc))))
 
-      ;; Match other tags with attributes (skip the attributes, parse the body)
       ((tag ((quote @) attrs ...) . body) (loop body acc))
 
-      ;; Traverse nested lists
       ((head . tail) (loop tail
                            (loop head acc)))
 
-      ;; Base case
       (_ acc))))
 
-(define* (araneola-crawl #:key parent-domain url)
+(define* (araneola-crawl #:key parent-domain url (sleep-seconds 1))
   (let ((v-urls (visited-urls))
         (s (scriba-auto-logger)))
-    
+
     (unless (hash-ref v-urls url)
       (let ((d (fetch-html #:url url)))
         (hash-set! v-urls url
@@ -165,7 +168,7 @@
                                                         parent-domain
                                                         #:url url
                                                         #:sxml sxml)))))
-            
+
             (with-log-context `((link-count unquote
                                             (length links))
                                 (links unquote links))
@@ -174,6 +177,7 @@
                                   (log-info s "Found links")))
 
             (for-each (lambda (link)
+                        (sleep sleep-seconds)
                         (araneola-crawl #:parent-domain parent-domain
                                         #:url link)) links)))))))
 
@@ -193,7 +197,7 @@
                                (append v
                                        `((url unquote k))))
                              (visited-urls)))
-         
+
          (valid-xs (filter (lambda (x)
                              (assq-ref x
                                        'url)) xs))
@@ -226,7 +230,7 @@
                               'url #f))
          (url (if (string-prefix? "https://" raw-url) raw-url
                   (string-append "https://" raw-url))))
-    
+
     (with-log-context `((url unquote url))
                       (log-info s "Araneola is starting"))
 
