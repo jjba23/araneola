@@ -34,6 +34,8 @@
   #:use-module (htmlprag)
   #:use-module (srfi srfi-19)
   #:use-module (araneola sitemap)
+  #:use-module (araneola uri)
+  #:use-module (araneola http)
   #:use-module (scriba auto)
   #:use-module (scriba scriba)
   #:export (main))
@@ -41,123 +43,33 @@
 (define visited-urls
   (make-parameter (make-hash-table)))
 
-(define (normalize-url parent-domain path)
-  "Ensures correct joining of domain and paths to prevent double slashes."
-  (let ((clean-domain (string-trim-right parent-domain #\/))
-        (clean-path (string-trim path #\/)))
-    (string-append clean-domain "/" clean-path)))
+(define (execute-fetch-loop current-uri redirects-left logger)
+  "Recursively fetches URIs, resolving redirects up to a specified depth limit."
+  (let ((uri (if (string? current-uri) (string->uri current-uri) current-uri)))
+    (if (<= redirects-left 0)
+        (throw 'http-error "Maximum redirect depth exceeded" uri)
+        (let-values (((response body)
+                      (http-get uri #:headers '((User-Agent . "Araneola/1.0 (contact: jjbigorra@gmail.com)")))))
+          (let ((status (response-code response)))
+            (cond
+              ((or (= status 301) (= status 302))
+               (let* ((location (response-location response))
+                      (resolved-uri (resolve-uri uri location))
+                      (l (uri->string resolved-uri)))
+                 (log-info logger "Redirecting (~a) to ~a" status l)
+                 (execute-fetch-loop resolved-uri (- redirects-left 1) logger)))
+              ((>= status 400)
+               (throw 'http-error status uri response))
+              (else
+               (parse-http-response response body logger))))))))
 
-(define* (fetch-html #:key url)
-  "Fetches the URL and returns the body as a UTF-8 string, or #f on failure."
-  (let ((s (scriba-auto-logger))
-        (initial-uri (if (string? url)
-                         (string->uri url) url)))
-    (with-log-context `((url unquote url))
-                      (log-info s "Fetching HTML"))
 
-    (define (do-fetch current-uri redirects-left)
-      (if (<= redirects-left 0)
-          (throw 'http-error "Maximum redirect depth exceeded" current-uri)
-          (let-values (((response body)
-                        (http-get current-uri
-                                  #:headers '((User-Agent . "Araneola/1.0 (contact: jjbigorra@gmail.com)")))))
-                      (let ((status (response-code response)))
-                        (cond
-                          ((or (= status 301)
-                               (= status 302))
-                           (let* ((location (response-location response))
-                                  (l (uri->string location)))
-                             (log-info s "Redirecting (~a) to ~a" status l)
-                             (do-fetch l
-                                       (- redirects-left 1))))
-                          ((>= status 400)
-                           (throw 'http-error status current-uri response))
-                          (else (let* ((raw-lm (response-last-modified
-                                                response #f))
-                                       (last-modified (and raw-lm
-                                                           (date->string
-                                                            raw-lm "~Y-~m-~d"))))
-                                  (unless (= status 200)
-                                    (with-log-context `((status ,status))
-                                                      (log-info s
-                                                       "Received HTTP status")))
-                                  `((body unquote
-                                          (if (bytevector? body)
-                                              (utf8->string body) body))
-                                    (last-modified unquote last-modified)))))))))
-
-    (catch #t
-           (lambda ()
-             (do-fetch initial-uri 5))
-           (lambda (key . args)
-             (if (eq? key
-                      'http-error)
-                 (begin
-                   (with-log-context `((error unquote key)
-                                       (details unquote args)
-                                       (url unquote url))
-                                     (log-error s "Failed to fetch URL")) #f)
-                 (apply throw key args))))))
-
-(define* (is-interesting-url? #:key parent-domain url)
-  "Validates if the fully qualified URL belongs to the target domain."
-  (cond
-    ((string-contains url "../")
-     #f)
-    ((or (equal? "" url)
-         (equal? "/" url)
-         (equal? parent-domain url))
-     #f)
-    ((string-prefix? parent-domain url)
-     #t)
-    (else #f)))
-
-(define* (extract-links #:key parent-domain url sxml)
-  "Recursively walks the SXML tree and extracts all interesting 'href' values."
-  (let loop
-    ((tree sxml)
-     (acc '()))
-    (match tree
-      (((quote a) ((quote @) attrs ...) . body) (let* ((href-pair (assq 'href
-                                                                        attrs))
-                                                       (raw-href (and
-                                                                  href-pair
-                                                                  (cadr
-                                                                   href-pair)))
-                                                       (href-val (and raw-href
-                                                                  (cond
-                                                                    ((string-prefix?
-                                                                      "//"
-                                                                      raw-href)
-                                                                     (string-append
-                                                                      "https:"
-                                                                      raw-href))
-                                                                    ((string-prefix?
-                                                                      "/"
-                                                                      raw-href)
-                                                                     (normalize-url
-                                                                      parent-domain
-                                                                      raw-href))
-                                                                    (else
-                                                                     raw-href)))))
-                                                  (if (and href-val
-                                                           (is-interesting-url?
-                                                            #:parent-domain
-                                                            parent-domain
-                                                            #:url href-val))
-                                                      (loop body
-                                                            (cons href-val acc))
-                                                      (loop body acc))))
-      ((tag ((quote @) attrs ...) . body) (loop body acc))
-      ((head . tail) (loop tail
-                           (loop head acc)))
-      (_ acc))))
 
 (define* (araneola-crawl #:key parent-domain url
-                         (sleep-seconds 0))
+                         (sleep-seconds 1))
   (let ((v-urls (visited-urls))
         (s (scriba-auto-logger)))
-    
+
     (unless (hash-ref v-urls url)
       (let ((d (fetch-html #:url url)))
         (when d
@@ -171,7 +83,7 @@
                                                'body)))
                    (links (reverse (filter (lambda (l)
                                              (not (hash-ref v-urls l)))
-                                           (extract-links #:parent-domain
+                                           (extract-links-from-sxml #:parent-domain
                                                           parent-domain
                                                           #:url url
                                                           #:sxml sxml)))))
@@ -203,7 +115,7 @@
                 ((string-prefix? "http://" raw-url)
                  raw-url)
                 (else (string-append "https://" raw-url)))))
-    
+
     (with-log-context `((url unquote url))
                       (log-info s "Araneola is starting"))
 
