@@ -1,4 +1,4 @@
-#+title: Araneola
+#+title: Araneola 🕷️🕸️
 #+author: Josep Bigorra
 #+email: jjbigorra@gmail.com
 #+language: en
@@ -6,7 +6,7 @@
 [[https://jointhefreeworld.org/ggg/dist/scheme-guile.svg]] [[https://jointhefreeworld.org/ggg/dist/gnu-guix.svg]] [[https://jointhefreeworld.org/ggg/dist/maak.svg]]
 [[https://jointhefreeworld.org/ggg/dist/license-agpl3+.svg]]    [[https://jointhefreeworld.org/ggg/dist/license-fdl13+.svg]]
 
-Sitemap generator
+Araneola is a high-performance web crawler and sitemap generator written purely in GNU Guile Scheme. Built with a focus on streaming execution, it maps out web domains and pipelines the discoveries directly to disk, keeping your system memory pristine and your crawl fault-tolerant. 🕷️🕸️
 
 If you like my work, please support me by [[https://bmc.link/jjbigorra][buying me a cup of coffee ☕]] so I can continue with a lot of motivation.
 
