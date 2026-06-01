@@ -37,9 +37,10 @@
   #:use-module (scriba scriba)
   #:export (parse-http-response fetch-body))
 
-(define (parse-http-response response body logger)
+(define (parse-http-response response body)
   "Parses successful HTTP responses into an association list of string bodies and metadata."
-  (let* ((status (response-code response))
+  (let* ((s (scriba-auto-logger))
+         (status (response-code response))
          (raw-lm (response-last-modified response #f))
          (last-modified (and raw-lm
                              (date->string raw-lm "~Y-~m-~d"))))
@@ -51,7 +52,7 @@
                 (utf8->string body) body))
       (last-modified unquote last-modified))))
 
-(define* (fetch-body #:key url)
+(define* (fetch-body #:key continuation-proc url)
   "Fetches the URL and returns the body as a UTF-8 string, or #f on failure."
   (let ((s (scriba-auto-logger))
         (initial-uri (if (string? url)
@@ -59,8 +60,7 @@
     (with-log-context `((url unquote url))
                       (log-info s "Fetching HTML"))
     (catch #t
-           (lambda ()
-             (execute-fetch-loop initial-uri 5 s))
+           continuation-proc
            (lambda (key . args)
              (if (eq? key
                       'http-error)

@@ -38,7 +38,14 @@
   '(scm))
 
 (define sitemap-domain
-  (make-parameter "nl.wikipedia.org"))
+  (make-parameter "jointhefreeworld.org"))
+
+(define scriba-logger-options
+  (string-join (map (lambda (x)
+                      (format #f "~a=~a"
+                              (car x)
+                              (cdr x)))
+                    `((SCRIBA_LOGGER . color-console))) " "))
 
 ;; ====== Maak abstractions ======
 
@@ -112,18 +119,20 @@
        #:verbose? #t)))
 
 (define (dev-run)
-  (time-machine-manifest-shell (list
+  (time-machine-manifest-shell (list "env" scriba-logger-options
                                 "guile -L ./src -c '((@(araneola main) main))'"
                                 "--resources ./resources" "--url"
-                                (sitemap-domain))))
+                                (sitemap-domain))
+                               #:verbose? #t))
 
 (define (run)
-  (time-machine-program-shell (list "araneola" "--url"
+  (time-machine-program-shell (list "env" scriba-logger-options "araneola" "--url"
                                     (sitemap-domain))))
 
 (define (hot-reload)
   "Hot-reloading developer's setup."
-  (manifest-shell (list "watchexec 'maak run'"
+  (manifest-shell (list scriba-logger-options
+                        "watchexec 'maak run'"
                         "--clear"
                         (~ "--exts ~a"
                            (string-join (map symbol->string
