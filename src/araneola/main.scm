@@ -17,6 +17,7 @@
   #:use-module (ice-9 getopt-long)
   #:use-module (web client)
   #:use-module (web response)
+  #:use-module (web uri)
   #:use-module (rnrs bytevectors)
   #:use-module (htmlprag)
   #:use-module (srfi srfi-1)
@@ -36,29 +37,59 @@
 
 (define* (fetch-html #:key url)
   "Fetches the URL and returns the body as a UTF-8 string, or #f on failure."
-  (let* ((s (scriba-auto-logger)))
+  (let ((s (scriba-auto-logger))
+        (initial-uri (if (string? url)
+                         (string->uri url) url)))
     (with-log-context `((url unquote url))
                       (log-info s "Fetching HTML"))
 
+    (define (do-fetch current-uri redirects-left)
+      (if (<= redirects-left 0)
+          (throw 'http-error "Maximum redirect depth exceeded" current-uri)
+          (let* ((response+body (call-with-values (lambda ()
+                                                    (http-get current-uri
+                                                              #:headers `((User-Agent . "Araneola/1.0 (contact: jjbigorra@gmail.com)"))))
+                                                  list))
+                 (response (car response+body))
+                 (body (cadr response+body))
+                 (status (response-code response)))
+            
+            (cond
+              ((or (= status 301)
+                   (= status 302))
+               (let* ((location (response-location response))
+                      (l (uri->string location)))
+                 (log-info s "Redirecting (~a) to ~a" status l)
+                 (do-fetch l
+                           (- redirects-left 1))))
+              ((>= status 400)
+               (throw 'http-error status current-uri response))
+              (else (let* ((raw-lm (response-last-modified response #f))
+                           (last-modified (if raw-lm
+                                              (date->string raw-lm "~Y-~m-~d")
+                                              #f)))
+                      (log-info s "Response: ~a" response)
+                      (unless (eq? status 200)
+                        (with-log-context `((status unquote status))
+                                          (log-info s "Received HTTP status")))
+                      (if (bytevector? body)
+                          `((body unquote
+                                  (utf8->string body))
+                            (last-modified unquote last-modified))
+                          `((body unquote body)
+                            (last-modified unquote last-modified)))))))))
+
     (catch #t
            (lambda ()
-             (let* ((response+body (call-with-values (lambda ()
-                                                       (http-get url)) list))
-                    (response (car response+body))
-                    (body (cadr response+body))
-                    (raw-lm (response-last-modified response #f))
-                    (last-modified (if raw-lm
-                                       (date->string raw-lm "~Y-~m-~d") #f)))
-               (if (bytevector? body)
-                   `((body unquote
-                           (utf8->string body))
-                     (last-modified unquote last-modified))
-                   `((body unquote body)
-                     (last-modified unquote last-modified)))))
+             (do-fetch initial-uri 3))
            (lambda (key . args)
-             (with-log-context `((error unquote key)
-                                 (url unquote url))
-                               (log-error s "Failed to fetch URL")) #f))))
+             (if (eq? key
+                      'http-error)
+                 (apply throw key args)
+                 (begin
+                   (with-log-context `((error unquote key)
+                                       (url unquote url))
+                                     (log-error s "Failed to fetch URL")) #f))))))
 
 (define* (is-interesting-url? #:key parent-domain url)
   (cond

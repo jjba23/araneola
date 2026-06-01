@@ -38,7 +38,7 @@
   '(scm))
 
 (define sitemap-domain
-  (make-parameter "jointhefreeworld.org"))
+  (make-parameter "nl.wikipedia.org"))
 
 ;; ====== Maak abstractions ======
 
