@@ -20,39 +20,31 @@
 
 (define-module (araneola sitemap)
   #:declarative? #t
-  #:use-module (ice-9 format)
-  #:use-module (ice-9 match)
-  #:use-module (srfi srfi-1)
-  #:use-module (srfi srfi-11)
   #:use-module (sxml simple)
   #:use-module (scriba auto)
   #:use-module (scriba scriba)
-  #:export (write-sitemap links->sitemap))
+  #:export (write-sitemap-header write-sitemap-item write-sitemap-footer))
 
-(define (write-sitemap sxml filename)
-  "Takes a SXML tree and writes a valid sitemap.xml."
-  (let* ((s (scriba-auto-logger))
-         (out-port (open-output-file filename)))
-    (with-log-context `((filename unquote filename))
-                      (log-info s "Writing sitemap to file")
-                      (sxml->xml sxml out-port)
-                      (close-port out-port)
-                      (log-success s "Wrote sitemap to file"))))
+(define (write-sitemap-header port)
+  "Writes the initial XML declaration and opens the root urlset element."
+  (display "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" port)
+  (display "<urlset xmlns=\"http://www.sitemaps.org/schemas/sitemap/0.9\">
+"
+           port)
+  (force-output port))
 
-(define (links->sitemap xs)
-  "Generates a valid sitemap SXML structure from the visited-urls parameter."
-  (let* ((xs (hash-map->list (lambda (k v)
-                               (acons 'url k v)) xs))
-         (sitemap-sxml `(*TOP* (*PI* xml "version=\"1.0\" encoding=\"UTF-8\"")
-                               (urlset (@ (xmlns
-                                           "http://www.sitemaps.org/schemas/sitemap/0.9"))
-                                       ,@(map (lambda (x)
-                                                (let ((url (assq-ref x
-                                                                     'url))
-                                                      (lastmod (assq-ref x
-                                                                         'last-modified)))
-                                                  `(url (loc ,url)
-                                                        ,@(if lastmod
-                                                              `((lastmod ,lastmod))
-                                                              '())))) xs)))))
-    sitemap-sxml))
+(define (write-sitemap-item port url lastmod)
+  "Appends a single isolated <url> element to the sitemap stream instantly."
+  (let ((item-sxml `(url (loc ,url)
+                         ,@(if lastmod
+                               `((lastmod ,lastmod))
+                               '()))))
+    (display "  " port)
+    (sxml->xml item-sxml port)
+    (newline port)
+    (force-output port)))
+
+(define (write-sitemap-footer port)
+  "Closes the root urlset element."
+  (display "</urlset>\n" port)
+  (force-output port))

@@ -34,75 +34,13 @@
   #:use-module (htmlprag)
   #:use-module (srfi srfi-19)
   #:use-module (araneola sitemap)
-  #:use-module (araneola http)
   #:use-module (araneola araneola)
   #:use-module (scriba auto)
   #:use-module (scriba scriba)
   #:export (main))
 
-(define visited-urls
-  (make-parameter (make-hash-table)))
 
-(define (execute-fetch-loop current-uri redirects-left)
-  "Recursively fetches URIs, resolving redirects up to a specified depth limit."
-  (let ((uri (if (string? current-uri)
-                 (string->uri current-uri) current-uri))
-        (s (scriba-auto-logger)))
-    (if (<= redirects-left 0)
-        (throw 'http-error "Maximum redirect depth exceeded" uri)
-        (let-values (((response body)
-                      (http-get uri
-                                #:headers '((User-Agent . "Araneola/1.0 (contact: jjbigorra@gmail.com)")))))
-                    (let ((status (response-code response)))
-                      (cond
-                        ((or (= status 301)
-                             (= status 302))
-                         (let* ((location (response-location response))
-                                (resolved-uri (resolve-uri uri location))
-                                (l (uri->string resolved-uri)))
-                           (log-info s "Redirecting (~a) to ~a" status l)
-                           (execute-fetch-loop resolved-uri
-                                               (- redirects-left 1))))
-                        ((>= status 400)
-                         (throw 'http-error status uri response))
-                        (else (parse-http-response response body))))))))
 
-(define* (araneola-crawl #:key parent-domain url
-                         (sleep-seconds 0))
-  (let ((v-urls (visited-urls))
-        (s (scriba-auto-logger))
-        (continuation-proc (lambda ()
-                             (execute-fetch-loop url 5))))
-
-    (unless (hash-ref v-urls url)
-      (let ((d (fetch-body #:url url
-                           #:continuation-proc continuation-proc)))
-        (when d
-          (hash-set! v-urls url
-                     `((visited . #t) (last-modified unquote
-                                                     (assq-ref d
-                                                               'last-modified))))
-          (when (assq-ref d
-                          'body)
-            (let* ((sxml (html->sxml (assq-ref d
-                                               'body)))
-                   (links (reverse (filter (lambda (l)
-                                             (not (hash-ref v-urls l)))
-                                           (extract-links-from-sxml
-                                            #:parent-domain parent-domain
-                                            #:url url
-                                            #:sxml sxml)))))
-              (with-log-context `((link-count unquote
-                                              (length links))
-                                  (links unquote links))
-                                (if (nil? links)
-                                    (log-debug s "No links found")
-                                    (log-info s "Found links")))
-
-              (for-each (lambda (link)
-                          (sleep sleep-seconds)
-                          (araneola-crawl #:parent-domain parent-domain
-                                          #:url link)) links))))))))
 
 (define* (main #:key (args (command-line)))
   (let* ((option-spec '((resources (single-char #\r)
@@ -124,12 +62,22 @@
     (with-log-context `((url unquote url))
                       (log-info s "Araneola is starting"))
 
-    (parameterize ((visited-urls (make-hash-table)))
-      (araneola-crawl #:parent-domain url
-                      #:url url)
-      (with-log-context `((total-link-count unquote
-                                            (hash-count (const #t)
-                                                        (visited-urls))))
-                        (log-info s "Links found"))
-      (write-sitemap (links->sitemap (visited-urls)) "sitemap.xml")
-      (log-info s "Araneola is stopping"))))
+    ;; Open the connection stream before crawling begins
+    (let ((out-port (open-output-file "sitemap.xml")))
+      ;; Write XML Header
+      (write-sitemap-header out-port)
+
+      (parameterize ((visited-urls (make-hash-table))
+                     (sitemap-port out-port))
+        (araneola-crawl #:parent-domain url
+                        #:url url)
+
+        (with-log-context `((total-link-count unquote
+                                              (hash-count (const #t)
+                                                          (visited-urls))))
+                          (log-info s "Crawl complete. Closing stream.")))
+
+      (write-sitemap-footer out-port)
+      (close-port out-port))
+
+    (log-info s "Araneola is stopping")))
