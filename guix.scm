@@ -29,38 +29,6 @@
              (gnu packages tls)
              (gnu packages guile-xyz))
 
-(define-public guile-scriba
-  (package
-    (name "guile-scriba")
-    (version "0.1.2")
-    (source
-     (origin
-       (method git-fetch)
-       (uri (git-reference
-             (url "https://codeberg.org/jjba23/scriba.git")
-             (commit (string-append "v" version))))
-       (file-name (git-file-name name version))
-       (sha256
-        (base32 "1chhbhy21g6zghc3alpqhvb6nizylmzzapjariykv41f47ynhljs"))))
-    (propagated-inputs (list guile-json-4))
-    (build-system guile-build-system)
-    (native-inputs (list guile-3.0))
-    (arguments
-     (list
-      #:source-directory "src"))
-    (home-page "https://codeberg.org/jjba23/scriba")
-    (synopsis "Structured logging framework for Guile Scheme")
-    (description
-     "Scriba is a structured logging library for GNU Guile that prioritizes
-flexibility and observability.  It provides modular log routing, formatting,
-and filtering, allowing developers to generate human-readable console logs
-during development and machine-readable JSON logs for production environments.
-Key features include an auto-logger configured via environment variables,
-dynamically scoped log contexts using Scheme parameters, ahead-of-time log
-level filtering, and minimal runtime overhead achieved through memoization
-and compile-time macros.")
-    (license license:lgpl3+)))
-
 (define %source-dir
   (dirname (current-filename)))
 
@@ -95,10 +63,10 @@ and compile-time macros.")
                   (,(getenv "GUILE_LOAD_PATH")))
                 `("GUILE_LOAD_COMPILED_PATH" ":" prefix
                   (,(getenv "GUILE_LOAD_COMPILED_PATH")))))))))
-
     (build-system guile-build-system)
+    (propagated-inputs (list guile-scriba))
     (native-inputs (list guile-3.0))
-    (inputs (list guile-3.0 bash-minimal guile-scriba guile-lib guile-gnutls))
+    (inputs (list guile-3.0 bash-minimal guile-lib guile-gnutls))
     (synopsis "")
     (description "")
     (home-page "https://codeberg.org/jjba23/araneola")

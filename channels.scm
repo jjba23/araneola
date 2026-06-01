@@ -19,7 +19,7 @@
         (name 'guix)
         (url "https://codeberg.org/guix/guix.git")
         (branch "master")
-        (commit "442fff85d1cb39461fabd7f9e0301716c9f5aa6d")
+        (commit "546d6bbc3e6132789200e167adb01f63c390368e")
         (introduction
          (make-channel-introduction "9edb3f66fd807b096b48283debdcddccfea34bad"
           (openpgp-fingerprint

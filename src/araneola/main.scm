@@ -19,6 +19,7 @@
   #:use-module (web response)
   #:use-module (rnrs bytevectors)
   #:use-module (htmlprag)
+  #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-19)
   #:use-module (scriba auto)
   #:use-module (scriba scriba)
@@ -115,7 +116,7 @@
 (define* (araneola-crawl #:key parent-domain url)
   (let ((v-urls (visited-urls))
         (s (scriba-auto-logger)))
-    
+
     (unless (hash-ref v-urls url)
       (let ((d (fetch-html #:url url)))
         (hash-set! v-urls url
@@ -133,7 +134,7 @@
                                                         parent-domain
                                                         #:url url
                                                         #:sxml sxml)))))
-            
+
             (with-log-context `((link-count unquote
                                             (length links))
                                 (links unquote links))
@@ -151,16 +152,13 @@
     (sxml->xml sxml out-port)
     (close-port out-port)))
 
-(use-modules (srfi srfi-1))
- ; Required for 'filter' if using Guile
-
 (define (make-sitemap urls)
   "Takes a list of URLs and writes a valid sitemap.xml using SXML."
   (let* ((xs (hash-map->list (lambda (k v)
                                (append v
                                        `((url unquote k))))
                              (visited-urls)))
-         
+
          (valid-xs (filter (lambda (x)
                              (assq-ref x
                                        'url)) xs))
@@ -193,7 +191,7 @@
                               'url #f))
          (url (if (string-prefix? "https://" raw-url) raw-url
                   (string-append "https://" raw-url))))
-    
+
     (with-log-context `((url unquote url))
                       (log-info s "Araneola is starting"))
 
