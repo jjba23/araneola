@@ -19,6 +19,19 @@ Search engines like DuckDuckGo, Ecosia, Google and Bing use massive fleets of cr
 ** What is a Sitemap?
 A sitemap is a file (typically written in XML format) that acts as a blueprint or master directory for a website. It explicitly lists all the important pages, videos, and files on a site, along with metadata about them (like when a page was last updated).
 
+#+begin_src xml
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+   <url>
+      <loc>http://www.example.com/</loc>
+      <lastmod>2005-01-01</lastmod>
+      <changefreq>monthly</changefreq>
+      <priority>0.8</priority>
+   </url>
+</urlset>
+
+#+end_src
+
 Instead of making search engine bots blindly guess how your website is structured by clicking random links, you hand them a sitemap.
 
 It tells search engines exactly where your content is, saving them time and ensures isolated or deeply buried pages (ones that don't have many internal links pointing to them) still get discovered and indexed.
@@ -27,9 +40,6 @@ For details on the format of the XML, see: https://www.sitemaps.org/protocol.htm
 
 ------
 
-/ARANEOLA/ means the little spider in latin
-
---------
 
 * Licensing
 
@@ -138,3 +148,12 @@ env SCRIBA_LOGGER=color-console guile -L ./src -c '((@(araneola main) main))'
 * Logger Configuration
 
 Araneola uses the powerful [[https://codeberg.org/jjba23/scriba][Scriba structured logging framework for Lisp (Guile Scheme)]] so check out the configuration options and possibilities there.
+
+
+-------
+
+/ARANEOLA/ means the little spider in latin
+
+[[https://jointhefreeworld.org/static-assets/araneola/araneola.png]]
+
+--------
