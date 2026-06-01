@@ -22,8 +22,8 @@
   #:declarative? #t
   #:use-module (ice-9 format)
   #:use-module (ice-9 match)
-  #:use-module (srfi srfi-1) ;Fixed: Imported only once
-  #:use-module (srfi srfi-11) ;Added for let-values
+  #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-13)
   #:use-module (sxml simple)
   #:use-module (ice-9 getopt-long)
@@ -33,6 +33,7 @@
   #:use-module (rnrs bytevectors)
   #:use-module (htmlprag)
   #:use-module (srfi srfi-19)
+  #:use-module (araneola sitemap)
   #:use-module (scriba auto)
   #:use-module (scriba scriba)
   #:export (main))
@@ -156,7 +157,7 @@
                          (sleep-seconds 0))
   (let ((v-urls (visited-urls))
         (s (scriba-auto-logger)))
-
+    
     (unless (hash-ref v-urls url)
       (let ((d (fetch-html #:url url)))
         (when d
@@ -186,35 +187,6 @@
                           (araneola-crawl #:parent-domain parent-domain
                                           #:url link)) links))))))))
 
-(define (write-sitemap sxml filename)
-  "Takes a SXML tree and writes a valid sitemap.xml."
-  (let* ((s (scriba-auto-logger))
-         (out-port (open-output-file filename)))
-    (with-log-context `((filename unquote filename))
-                      (log-info s "Writing sitemap to file")
-                      (sxml->xml sxml out-port)
-                      (close-port out-port)
-                      (log-success s "Wrote sitemap to file"))))
-
-(define (make-sitemap)
-  "Generates a valid sitemap SXML structure from the visited-urls parameter."
-  (let* ((xs (hash-map->list (lambda (k v)
-                               (acons 'url k v))
-                             (visited-urls)))
-         (sitemap-sxml `(*TOP* (*PI* xml "version=\"1.0\" encoding=\"UTF-8\"")
-                               (urlset (@ (xmlns
-                                           "http://www.sitemaps.org/schemas/sitemap/0.9"))
-                                       ,@(map (lambda (x)
-                                                (let ((url (assq-ref x
-                                                                     'url))
-                                                      (lastmod (assq-ref x
-                                                                         'last-modified)))
-                                                  `(url (loc ,url)
-                                                        ,@(if lastmod
-                                                              `((lastmod ,lastmod))
-                                                              '())))) xs)))))
-    sitemap-sxml))
-
 (define* (main #:key (args (command-line)))
   (let* ((option-spec '((resources (single-char #\r)
                                    (value #t))
@@ -231,15 +203,16 @@
                 ((string-prefix? "http://" raw-url)
                  raw-url)
                 (else (string-append "https://" raw-url)))))
-
+    
     (with-log-context `((url unquote url))
                       (log-info s "Araneola is starting"))
 
     (parameterize ((visited-urls (make-hash-table)))
       (araneola-crawl #:parent-domain url
                       #:url url)
-      (with-log-context `((total-link-count unquote (hash-count (const #t)
-                                                         (visited-urls))))
+      (with-log-context `((total-link-count unquote
+                                            (hash-count (const #t)
+                                                        (visited-urls))))
                         (log-info s "Links found"))
-      (write-sitemap (make-sitemap) "sitemap.xml")
+      (write-sitemap (links->sitemap (visited-urls)) "sitemap.xml")
       (log-info s "Araneola is stopping"))))
