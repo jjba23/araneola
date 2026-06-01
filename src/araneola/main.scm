@@ -1,17 +1,29 @@
+;; araneola
+
+;; Copyright © Josep Bigorra <jjbigorra@gmail.com>
+
+;; araneola is free software: you can redistribute it and/or modify
+;; it under the terms of the Lesser GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+
+;; araneola is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; Lesser GNU General Public License for more details.
+
+;; You should have received a copy of the Lesser GNU General Public License
+;; along with araneola.  If not, see <https://www.gnu.org/licenses/>.
+
 ;; araneola: guile glyph generator
 ;; Copyright © Josep Bigorra <jjbigorra@gmail.com>
-;; [License Header Preserved...]
 
 (define-module (araneola main)
   #:declarative? #t
   #:use-module (ice-9 format)
-  #:use-module (ice-9 iconv)
   #:use-module (ice-9 match)
-  #:use-module (ice-9 popen)
-  #:use-module (ice-9 rdelim)
-  #:use-module (ice-9 string-fun)
-  #:use-module (ice-9 textual-ports)
-  #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-1) ;Fixed: Imported only once
+  #:use-module (srfi srfi-11) ;Added for let-values
   #:use-module (srfi srfi-13)
   #:use-module (sxml simple)
   #:use-module (ice-9 getopt-long)
@@ -20,7 +32,6 @@
   #:use-module (web uri)
   #:use-module (rnrs bytevectors)
   #:use-module (htmlprag)
-  #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-19)
   #:use-module (scriba auto)
   #:use-module (scriba scriba)
@@ -46,37 +57,33 @@
     (define (do-fetch current-uri redirects-left)
       (if (<= redirects-left 0)
           (throw 'http-error "Maximum redirect depth exceeded" current-uri)
-          (let* ((response+body (call-with-values (lambda ()
-                                                    (http-get current-uri
-                                                              #:headers `((User-Agent . "Araneola/1.0 (contact: jjbigorra@gmail.com)"))))
-                                                  list))
-                 (response (car response+body))
-                 (body (cadr response+body))
-                 (status (response-code response)))
-
-            (cond
-              ((or (= status 301)
-                   (= status 302))
-               (let* ((location (response-location response))
-                      (l (uri->string location)))
-                 (log-info s "Redirecting (~a) to ~a" status l)
-                 (do-fetch l
-                           (- redirects-left 1))))
-              ((>= status 400)
-               (throw 'http-error status current-uri response))
-              (else (let* ((raw-lm (response-last-modified response #f))
-                           (last-modified (if raw-lm
-                                              (date->string raw-lm "~Y-~m-~d")
-                                              #f)))
-                      (unless (eq? status 200)
-                        (with-log-context `((status unquote status))
-                                          (log-info s "Received HTTP status")))
-                      (if (bytevector? body)
-                          `((body unquote
-                                  (utf8->string body))
-                            (last-modified unquote last-modified))
-                          `((body unquote body)
-                            (last-modified unquote last-modified)))))))))
+          (let-values (((response body)
+                        (http-get current-uri
+                                  #:headers '((User-Agent . "Araneola/1.0 (contact: jjbigorra@gmail.com)")))))
+                      (let ((status (response-code response)))
+                        (cond
+                          ((or (= status 301)
+                               (= status 302))
+                           (let* ((location (response-location response))
+                                  (l (uri->string location)))
+                             (log-info s "Redirecting (~a) to ~a" status l)
+                             (do-fetch l
+                                       (- redirects-left 1))))
+                          ((>= status 400)
+                           (throw 'http-error status current-uri response))
+                          (else (let* ((raw-lm (response-last-modified
+                                                response #f))
+                                       (last-modified (and raw-lm
+                                                           (date->string
+                                                            raw-lm "~Y-~m-~d"))))
+                                  (unless (= status 200)
+                                    (with-log-context `((status ,status))
+                                                      (log-info s
+                                                       "Received HTTP status")))
+                                  `((body unquote
+                                          (if (bytevector? body)
+                                              (utf8->string body) body))
+                                    (last-modified unquote last-modified)))))))))
 
     (catch #t
            (lambda ()
@@ -88,7 +95,8 @@
                    (with-log-context `((error unquote key)
                                        (details unquote args)
                                        (url unquote url))
-                                     (log-error s "Failed to fetch URL")) #f))))))
+                                     (log-error s "Failed to fetch URL")) #f)
+                 (apply throw key args))))))
 
 (define* (is-interesting-url? #:key parent-domain url)
   "Validates if the fully qualified URL belongs to the target domain."
@@ -139,50 +147,47 @@
                                                       (loop body
                                                             (cons href-val acc))
                                                       (loop body acc))))
-
       ((tag ((quote @) attrs ...) . body) (loop body acc))
-
       ((head . tail) (loop tail
                            (loop head acc)))
-
       (_ acc))))
 
-(define* (araneola-crawl #:key parent-domain url (sleep-seconds 1))
+(define* (araneola-crawl #:key parent-domain url
+                         (sleep-seconds 0))
   (let ((v-urls (visited-urls))
         (s (scriba-auto-logger)))
 
     (unless (hash-ref v-urls url)
       (let ((d (fetch-html #:url url)))
-        (hash-set! v-urls url
-                   `((visited . #t) (last-modified unquote
-                                                   (assq-ref d
-                                                             'last-modified))))
-        (when (assq-ref d
-                        'body)
-          (let* ((sxml (html->sxml (assq-ref d
-                                             'body)))
-                 (links (reverse (filter (lambda (l)
-                                           ;; Only keep links we have NOT visited
-                                           (not (hash-ref v-urls l)))
-                                         (extract-links #:parent-domain
-                                                        parent-domain
-                                                        #:url url
-                                                        #:sxml sxml)))))
+        (when d
+          (hash-set! v-urls url
+                     `((visited . #t) (last-modified unquote
+                                                     (assq-ref d
+                                                               'last-modified))))
+          (when (assq-ref d
+                          'body)
+            (let* ((sxml (html->sxml (assq-ref d
+                                               'body)))
+                   (links (reverse (filter (lambda (l)
+                                             (not (hash-ref v-urls l)))
+                                           (extract-links #:parent-domain
+                                                          parent-domain
+                                                          #:url url
+                                                          #:sxml sxml)))))
+              (with-log-context `((link-count unquote
+                                              (length links))
+                                  (links unquote links))
+                                (if (nil? links)
+                                    (log-debug s "No links found")
+                                    (log-info s "Found links")))
 
-            (with-log-context `((link-count unquote
-                                            (length links))
-                                (links unquote links))
-                              (if (nil? links)
-                                  (log-debug s "No links found")
-                                  (log-info s "Found links")))
-
-            (for-each (lambda (link)
-                        (sleep sleep-seconds)
-                        (araneola-crawl #:parent-domain parent-domain
-                                        #:url link)) links)))))))
+              (for-each (lambda (link)
+                          (sleep sleep-seconds)
+                          (araneola-crawl #:parent-domain parent-domain
+                                          #:url link)) links))))))))
 
 (define (write-sitemap sxml filename)
-  "Takes a SXML tree and writes a valid sitemap.xml using."
+  "Takes a SXML tree and writes a valid sitemap.xml."
   (let* ((s (scriba-auto-logger))
          (out-port (open-output-file filename)))
     (with-log-context `((filename unquote filename))
@@ -191,17 +196,11 @@
                       (close-port out-port)
                       (log-success s "Wrote sitemap to file"))))
 
-(define (make-sitemap urls)
-  "Takes a list of URLs and writes a valid sitemap.xml using SXML."
+(define (make-sitemap)
+  "Generates a valid sitemap SXML structure from the visited-urls parameter."
   (let* ((xs (hash-map->list (lambda (k v)
-                               (append v
-                                       `((url unquote k))))
+                               (acons 'url k v))
                              (visited-urls)))
-
-         (valid-xs (filter (lambda (x)
-                             (assq-ref x
-                                       'url)) xs))
-
          (sitemap-sxml `(*TOP* (*PI* xml "version=\"1.0\" encoding=\"UTF-8\"")
                                (urlset (@ (xmlns
                                            "http://www.sitemaps.org/schemas/sitemap/0.9"))
@@ -213,7 +212,7 @@
                                                   `(url (loc ,url)
                                                         ,@(if lastmod
                                                               `((lastmod ,lastmod))
-                                                              '())))) valid-xs)))))
+                                                              '())))) xs)))))
     sitemap-sxml))
 
 (define* (main #:key (args (command-line)))
@@ -223,13 +222,15 @@
                              (value #t)
                              (required? #t))))
          (options (getopt-long args option-spec))
-         (resources (option-ref options
-                                'resources #f))
          (s (scriba-auto-logger))
          (raw-url (option-ref options
                               'url #f))
-         (url (if (string-prefix? "https://" raw-url) raw-url
-                  (string-append "https://" raw-url))))
+         (url (cond
+                ((string-prefix? "https://" raw-url)
+                 raw-url)
+                ((string-prefix? "http://" raw-url)
+                 raw-url)
+                (else (string-append "https://" raw-url)))))
 
     (with-log-context `((url unquote url))
                       (log-info s "Araneola is starting"))
@@ -237,9 +238,8 @@
     (parameterize ((visited-urls (make-hash-table)))
       (araneola-crawl #:parent-domain url
                       #:url url)
-      (with-log-context `((total-link-count unquote
-                                            (hash-count (const #t)
-                                                        (visited-urls))))
+      (with-log-context `((total-link-count unquote (hash-count (const #t)
+                                                         (visited-urls))))
                         (log-info s "Links found"))
-      (write-sitemap (make-sitemap (visited-urls)) "sitemap.xml")
+      (write-sitemap (make-sitemap) "sitemap.xml")
       (log-info s "Araneola is stopping"))))
