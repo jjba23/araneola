@@ -116,7 +116,7 @@
 (define* (araneola-crawl #:key parent-domain url)
   (let ((v-urls (visited-urls))
         (s (scriba-auto-logger)))
-
+    
     (unless (hash-ref v-urls url)
       (let ((d (fetch-html #:url url)))
         (hash-set! v-urls url
@@ -134,7 +134,7 @@
                                                         parent-domain
                                                         #:url url
                                                         #:sxml sxml)))))
-
+            
             (with-log-context `((link-count unquote
                                             (length links))
                                 (links unquote links))
@@ -148,9 +148,13 @@
 
 (define (write-sitemap sxml filename)
   "Takes a SXML tree and writes a valid sitemap.xml using."
-  (let* ((out-port (open-output-file filename)))
-    (sxml->xml sxml out-port)
-    (close-port out-port)))
+  (let* ((s (scriba-auto-logger))
+         (out-port (open-output-file filename)))
+    (with-log-context `((filename unquote filename))
+                      (log-info s "Writing sitemap to file")
+                      (sxml->xml sxml out-port)
+                      (close-port out-port)
+                      (log-success s "Wrote sitemap to file"))))
 
 (define (make-sitemap urls)
   "Takes a list of URLs and writes a valid sitemap.xml using SXML."
@@ -158,7 +162,7 @@
                                (append v
                                        `((url unquote k))))
                              (visited-urls)))
-
+         
          (valid-xs (filter (lambda (x)
                              (assq-ref x
                                        'url)) xs))
@@ -191,7 +195,7 @@
                               'url #f))
          (url (if (string-prefix? "https://" raw-url) raw-url
                   (string-append "https://" raw-url))))
-
+    
     (with-log-context `((url unquote url))
                       (log-info s "Araneola is starting"))
 
