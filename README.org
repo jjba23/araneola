@@ -23,7 +23,11 @@ Instead of making search engine bots blindly guess how your website is structure
 
 It tells search engines exactly where your content is, saving them time and ensures isolated or deeply buried pages (ones that don't have many internal links pointing to them) still get discovered and indexed.
 
-/ARANEOLA/ is the little spider in latin
+For details on the format of the XML, see: https://www.sitemaps.org/protocol.html
+
+------
+
+/ARANEOLA/ means the little spider in latin
 
 --------
 
