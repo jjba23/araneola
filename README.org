@@ -91,3 +91,33 @@ Required tags
 The URL of the image.
 
 In some cases, the image URL may not be on the same domain as your main site. This is fine, as long as you verify both domains in Search Console. If, for example, you use a content delivery network such as Google Sites to host your images, make sure that the hosting site is verified in Search Console. In addition, make sure that your robots.txt file doesn't disallow the crawling of any content you want indexed.
+
+
+---------------------
+
+
+* Getting Started
+
+
+The easiest way to run Araneola predictably is by using *GNU Guix*. This ensures all dependencies (such as Guile, guile-lib, guile-scriba) are locked to the correct revisions but feel free to use the source code at will.
+
+The project is built primarily with Guix (though you may use the code as you please) and automation is done with [[https://codeberg.org/jjba23/maak][Maak]] , check the ~maak.scm~ file.
+
+Maak is very recommended, but not necessary, all you need is the Guix package manager installed, and then you can run the program easily. But feel free to use the Scheme code at will.
+
+#+begin_src bash
+guix time-machine --channels=channels.scm -- shell -m manifest.scm --
+
+env SCRIBA_LOGGER=color-console guile -L ./src -c '((@(araneola main) main))'
+
+--resources ./resources --url jointhefreeworld.org
+#+end_src
+
+*** CLI Options
+
+-  =-u, --url=: The target root domain to begin crawling (protocols will automatically default to =https://= if left unspecified).
+-  =-r, --resources=: Specifies the path directory to look for local assets or configuration resources.
+
+* Logger Configuration
+
+Araneola uses the powerful [[https://codeberg.org/jjba23/scriba][Scriba structured logging framework for Lisp (Guile Scheme)]] so check out the configuration options and possibilities there.
