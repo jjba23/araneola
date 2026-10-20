@@ -43,6 +43,6 @@
                           guile-lib
                           guile-gnutls
                           ;; scriba logs through (scriba json), which needs it.
-                          guile-json
+                          guile-json-4
                           guile-scriba
                           guile-ares-rs))
