@@ -1,16 +1,104 @@
-
 +----------------------------------------------------------------------------+
 Araneola
-    Sitemap generator
+    Web crawler and sitemap generator
 
     See more at: https://codeberg.org/jjba23/araneola
     Software licensed under the GNU AGPL v3 or newer.
 
-USAGE: araneola [OPTIONS]
+USAGE: araneola --url URL [OPTIONS]
+
+    Crawls the site at URL and writes sitemap.xml (unless --output says
+    otherwise).  Links are followed breadth first, on the same host only,
+    and only where robots.txt allows it.
+
 OPTIONS:
-    TODO
+    -u, --url URL
+        The page to start from.  A missing scheme means https://.
+
+    -o, --output PATH
+        Where to write the sitemap.  Default: sitemap.xml
+
+        The file is written to PATH.tmp and renamed when the crawl ends,
+        so an interrupted run never replaces a good sitemap with a
+        half-written one.
+
+    --max-urls N
+        Stop after N pages.  Default: 0 (no limit).
+
+    --max-depth N
+        Follow links at most N levels below the seed page.  A page that
+        was fetched is still listed, even when its links are not followed.
+
+    --exclude REGEX
+        Never crawl a URL matching REGEX.  May be repeated; a URL is
+        dropped when it matches any of the patterns.
+
+    --include REGEX
+        Only crawl URLs matching REGEX.  May be repeated; a URL is kept
+        when it matches at least one pattern.  The seed page is always
+        crawled, so --include narrows a crawl instead of cancelling it.
+
+        Both are matched against the canonical URL, so a pattern can
+        describe a path (/search) or a whole origin.  A URL rejected by
+        a pattern is never requested at all.
+
+    -d, --delay SECONDS
+        Minimum pause between requests; fractions are allowed.
+        robots.txt Crawl-delay is honoured on top of this value.
+
+    -t, --timeout SECONDS
+        Give up on a request after this long.  Default: 30
+
+    --retries N
+        Retry transient failures (timeouts, 429, 5xx) with exponential
+        backoff.  Default: 2
+
+    --user-agent UA
+        The User-Agent to announce.  Sites decide their robots.txt rules
+        from this string.
+
+    --sitemap-base-url URL
+        Public location of the sitemap directory, used for the entries of
+        a sitemap index when the crawl is split across several files.
+
+    --include-subdomains
+        Follow links to subdomains of the seed host.  Off by default.
+
+    --no-robots
+        Ignore robots.txt.  Only for sites you control.
+
+    --no-split
+        Never write a sitemap index, even past the 50,000 URL or 50 MB
+        limit of a single sitemap file.
+
+    -v, --verbose
+        Log every URL as it is fetched.
 
     -h, --help
         Display this help message and exit.
+
+NOTES:
+    - Only http and https URLs on the seed host (and, with
+      --include-subdomains, its subdomains) are followed.  Links that look
+      like the host but are not it, such as example.com.evil.test, are
+      treated as off-site.
+    - URLs are canonicalised before being fetched: fragments are dropped,
+      host and scheme are lower-cased, default ports are removed.
+    - rel="nofollow" links are not followed, and <base href> is respected.
+    - Responses larger than 5 MiB are truncated before parsing.
+    - Pages that ask not to be indexed are crawled for links but left out
+      of the sitemap: <meta name="robots" content="noindex"> and an
+      X-Robots-Tag: noindex response header are both honoured.
+    - A page may name the URL it should be indexed as with
+      <link rel="canonical">; the sitemap lists that URL, once, instead of
+      every spelling that leads to the page.
+    - Timeouts, dropped connections and 5xx/429 answers are retried with
+      exponential backoff, honouring Retry-After.  Requests are never
+      retried for a 404 or a bad certificate.
+
+EXIT STATUS:
+    0   the crawl finished and a sitemap was written
+    1   nothing could be crawled, or the crawl was aborted
+    2   usage error
 
 +----------------------------------------------------------------------------+

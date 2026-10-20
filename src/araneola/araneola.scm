@@ -15,206 +15,311 @@
 ;; You should have received a copy of the Lesser GNU General Public License
 ;; along with araneola.  If not, see <https://www.gnu.org/licenses/>.
 
-;; araneola: guile glyph generator
-;; Copyright © Josep Bigorra <jjbigorra@gmail.com>
+;;; Commentary:
+;;;
+;;; The crawl itself: a breadth-first walk over a frontier queue.
+;;;
+;;; Version 1 recursed once per link, which meant a deep site could exhaust
+;;; the stack, and any exception raised by a child page unwound through every
+;;; ancestor.  This version keeps an explicit queue instead, so:
+;;;
+;;; - memory is bounded by the frontier, not by the recursion depth;
+;;; - one page failing cannot end the crawl (`fetch-url' never raises);
+;;; - a page is marked visited *before* it is fetched, so two parents linking
+;;;   to the same page cannot both fetch it;
+;;; - limits (`max-urls', `max-depth') are checked in one place;
+;;; - a page that asks not to be indexed (meta robots or an X-Robots-Tag
+;;;   header) is crawled for links but kept out of the sitemap, and a page
+;;;   that declares a canonical URL is listed once, under that URL;
+;;; - `exclude' and `include' regular expressions are matched against the
+;;;   canonical URL before a page is queued, so a site's `/search' or
+;;;   pagination traps cost no requests at all;
+;;; - robots.txt is consulted per host, and a slow host's Crawl-delay is
+;;;   folded into the politeness delay.
+;;;
+;;; Code:
 
 (define-module (araneola araneola)
   #:declarative? #t
-  #:use-module (ice-9 format)
   #:use-module (ice-9 match)
+  #:use-module (ice-9 q)
   #:use-module (srfi srfi-1)
+  #:use-module (srfi srfi-9)
   #:use-module (srfi srfi-11)
   #:use-module (srfi srfi-13)
-  #:use-module (sxml simple)
-  #:use-module (ice-9 getopt-long)
-  #:use-module (web client)
-  #:use-module (web response)
   #:use-module (web uri)
-  #:use-module (rnrs bytevectors)
-  #:use-module (htmlprag)
+  #:use-module (araneola html)
   #:use-module (araneola http)
+  #:use-module (araneola robots)
   #:use-module (araneola sitemap)
-  #:use-module (srfi srfi-19)
-  #:use-module (scriba scriba)
+  #:use-module (araneola url)
   #:use-module (scriba auto)
-  #:export (extract-links-from-sxml normalize-url
-                                    resolve-uri
-                                    is-interesting-url?
-                                    araneola-crawl
-                                    visited-urls
-                                    execute-fetch-loop
-                                    sitemap-port))
+  #:use-module (scriba scriba)
+  #:re-export (extract-links-from-sxml
+               resolve-uri
+               normalize-url
+               is-interesting-url?)
+  #:export (visited-urls
+            araneola-crawl
+            crawl-origin))
 
+;;; The set of URLs already handled.  Exposed as a parameter so a caller can
+;;; inspect the result, or hand in a warm table to continue a previous run.
 (define visited-urls
   (make-parameter (make-hash-table)))
 
-(define* (extract-links-from-sxml #:key parent-domain url sxml)
-  "Recursively walks the SXML tree and extracts all interesting 'href' values."
-  (let loop
-    ((tree sxml)
-     (acc '()))
-    (match tree
-      (((quote a) ((quote @) attrs ...) . body) (let* ((href-pair (assq 'href
-                                                                        attrs))
-                                                       (raw-href (and
-                                                                  href-pair
-                                                                  (cadr
-                                                                   href-pair)))
-                                                       (href-val (and raw-href
-                                                                  (cond
-                                                                    ((string-prefix?
-                                                                      "//"
-                                                                      raw-href)
-                                                                     (string-append
-                                                                      "https:"
-                                                                      raw-href))
-                                                                    ((string-prefix?
-                                                                      "/"
-                                                                      raw-href)
-                                                                     (normalize-url
-                                                                      parent-domain
-                                                                      raw-href))
-                                                                    (else
-                                                                     raw-href)))))
-                                                  (if (and href-val
-                                                           (is-interesting-url?
-                                                            #:parent-domain
-                                                            parent-domain
-                                                            #:url href-val))
-                                                      (loop body
-                                                            (cons href-val acc))
-                                                      (loop body acc))))
-      ((tag ((quote @) attrs ...) . body) (loop body acc))
-      ((head . tail) (loop tail
-                           (loop head acc)))
-      (_ acc))))
+(define* (crawl-origin url)
+  "The scheme://host[:port] of URL, used as the robots.txt scope."
+  (let ((uri (catch #t
+               (lambda () (string->uri-reference url))
+               (lambda _ #f))))
+    (and uri (uri-host uri)
+         (catch #t
+           (lambda ()
+             (uri->string (build-uri (uri-scheme uri)
+                                     #:host (uri-host uri)
+                                     #:port (uri-port uri))))
+           (lambda _ #f)))))
 
-(define* (is-interesting-url? #:key parent-domain url)
-  "Validates if the fully qualified URL belongs to the target domain."
-  (cond
-    ((string-contains url "../")
-     #f)
-    ((or (equal? "" url)
-         (equal? "/" url)
-         (equal? parent-domain url))
-     #f)
-    ((string-prefix? parent-domain url)
-     #t)
-    (else #f)))
+(define (host-key url)
+  (or (crawl-origin url) url))
 
-(define (resolve-uri base relative)
-  "Safely resolve absolute, relative, host-relative, or protocol-relative URIs against a base URI."
-  (cond
-    ((uri-scheme relative)
-     relative) ;Already an absolute URI
-    ((uri-host relative)
-     ;; Protocol-relative URI (e.g., //example.com/path)
-     (build-uri (uri-scheme base)
-                #:userinfo (uri-userinfo relative)
-                #:host (uri-host relative)
-                #:port (uri-port relative)
-                #:path (uri-path relative)
-                #:query (uri-query relative)
-                #:fragment (uri-fragment relative)))
-    ((string-prefix? "/"
-                     (uri-path relative))
-     ;; Host-relative URI (e.g., /path/to/resource)
-     (build-uri (uri-scheme base)
-                #:userinfo (uri-userinfo base)
-                #:host (uri-host base)
-                #:port (uri-port base)
-                #:path (uri-path relative)
-                #:query (uri-query relative)
-                #:fragment (uri-fragment relative)))
-    (else
-     ;; Path-relative URI (e.g., sub/path or ../path)
-     (let* ((base-path (uri-path base))
-            (last-slash (string-rindex base-path #\/))
-            (dir (if last-slash
-                     (substring base-path 0
-                                (+ last-slash 1)) "/"))
-            (new-path (string-append dir
-                                     (uri-path relative))))
-       (build-uri (uri-scheme base)
-                  #:userinfo (uri-userinfo base)
-                  #:host (uri-host base)
-                  #:port (uri-port base)
-                  #:path new-path
-                  #:query (uri-query relative)
-                  #:fragment (uri-fragment relative))))))
+(define (monotonic-seconds)
+  (let ((now (gettimeofday)))
+    (+ (car now) (/ (cdr now) 1000000.0))))
 
-(define (normalize-url parent-domain path)
-  "Ensures correct joining of domain and paths to prevent double slashes."
-  (let ((clean-domain (string-trim-right parent-domain #\/))
-        (clean-path (string-trim path #\/)))
-    (string-append clean-domain "/" clean-path)))
+(define (sleep-for seconds)
+  (when (and seconds (> seconds 0))
+    (usleep (inexact->exact (round (* 1000000 seconds))))))
 
-(define* (araneola-crawl #:key parent-domain url
-                         (sleep-seconds 0))
-  (let ((v-urls (visited-urls))
-        (s (scriba-auto-logger))
-        (continuation-proc (lambda ()
-                             (execute-fetch-loop url 5))))
-    
-    (unless (hash-ref v-urls url)
-      (let ((d (fetch-body #:url url
-                           #:continuation-proc continuation-proc)))
-        (when d
-          (let ((last-mod (assq-ref d
-                                    'last-modified)))
-            ;; Update internal state cache
-            (hash-set! v-urls url
-                       `((visited . #t) (last-modified unquote last-mod)))
+(define (record-error! table kind)
+  (hash-set! table kind (+ 1 (or (hash-ref table kind) 0))))
 
-            ;; Stream content if the port exists
-            (when (sitemap-port)
-              (write-sitemap-item (sitemap-port) url last-mod)))
+(define (compile-patterns patterns)
+  "PATTERNS as compiled regular expressions.
 
-          (when (assq-ref d
-                          'body)
-            (let* ((sxml (html->sxml (assq-ref d
-                                               'body)))
-                   (links (reverse (filter (lambda (l)
-                                             (not (hash-ref v-urls l)))
-                                           (extract-links-from-sxml
-                                            #:parent-domain parent-domain
-                                            #:url url
-                                            #:sxml sxml)))))
-              (with-log-context `((link-count unquote
-                                              (length links))
-                                  (links unquote links))
-                                (if (nil? links)
-                                    (log-debug s "No links found")
-                                    (log-info s "Found links")))
+Strings that do not compile are dropped with a warning rather than ending
+the crawl: a typo in an exclusion rule should not cost a whole run."
+  (filter-map (lambda (pattern)
+                (cond
+                 ((regexp? pattern) pattern)
+                 ((and (string? pattern) (not (string-null? pattern)))
+                  (or (catch #t
+                        (lambda () (make-regexp pattern))
+                        (lambda _ #f))
+                      (begin
+                        (log-warning (scriba-auto-logger)
+                                     "Ignoring unusable filter pattern: ~a"
+                                     pattern)
+                        #f)))
+                 (else #f)))
+              patterns))
 
-              (for-each (lambda (link)
-                          (sleep sleep-seconds)
-                          (araneola-crawl #:parent-domain parent-domain
-                                          #:url link)) links))))))))
+(define (matches-pattern? patterns url)
+  (any (lambda (pattern) (regexp-exec pattern url)) patterns))
 
-(define (execute-fetch-loop current-uri redirects-left)
-  "Recursively fetches URIs, resolving redirects up to a specified depth limit."
-  (let ((uri (if (string? current-uri)
-                 (string->uri current-uri) current-uri))
-        (s (scriba-auto-logger)))
-    (if (<= redirects-left 0)
-        (throw 'http-error "Maximum redirect depth exceeded" uri)
-        (let-values (((response body)
-                      (http-get uri
-                                #:headers '((User-Agent . "Araneola/1.0 (contact: jjbigorra@gmail.com)")))))
-                    (let ((status (response-code response)))
-                      (cond
-                        ((or (= status 301)
-                             (= status 302))
-                         (let* ((location (response-location response))
-                                (resolved-uri (resolve-uri uri location))
-                                (l (uri->string resolved-uri)))
-                           (log-info s "Redirecting (~a) to ~a" status l)
-                           (execute-fetch-loop resolved-uri
-                                               (- redirects-left 1))))
-                        ((>= status 400)
-                         (throw 'http-error status uri response))
-                        (else (parse-http-response response body))))))))
+(define* (araneola-crawl #:key
+                         (parent-domain #f)
+                         (url #f)
+                         (sleep-seconds 0)
+                         (max-urls 0)
+                         (max-depth #f)
+                         (exclude '())
+                         (include '())
+                         (user-agent default-user-agent)
+                         (timeout default-timeout)
+                         (retries default-retries)
+                         (respect-robots? #t)
+                         (allow-subdomains? #f)
+                         (writer #f)
+                         (progress-every 50)
+                         (logger (scriba-auto-logger)))
+  "Crawl the site seeded at URL, appending every page to WRITER.
 
-(define sitemap-port
-  (make-parameter #f))
+EXCLUDE and INCLUDE are regular expressions (strings or compiled regexps)
+matched against canonical URLs; a URL must match no EXCLUDE pattern and, when
+INCLUDE is non-empty, at least one INCLUDE pattern, before it is queued.  The
+seed page itself is always crawled, so `--include' narrows a crawl instead of
+being able to cancel it outright.
+
+Returns an alist of counters: `fetched', `attempted', `errors',
+`skipped-robots', `noindex', `filtered', `redirects', `bytes', `visited',
+`error-kinds', `duration' and `stopped-by' (`done', `max-urls',
+`invalid-seed')."
+  (let* ((started (monotonic-seconds))
+         (seed (canonical-url (or url parent-domain "")))
+         (frontier (make-q))
+         (visited (visited-urls))
+         (queued (make-hash-table))
+         ;; URLs already published, so that a redirect target linked from two
+         ;; pages (or a page reached by two spellings) appears once.
+         (written (make-hash-table))
+         (robots-cache (make-hash-table))
+         (error-kinds (make-hash-table))
+         (excluded-patterns (compile-patterns exclude))
+         (included-patterns (compile-patterns include))
+         (state (list (cons 'fetched 0) (cons 'attempted 0) (cons 'errors 0)
+                      (cons 'skipped 0) (cons 'redirects 0) (cons 'bytes 0)
+                      (cons 'noindex 0) (cons 'filtered 0)
+                      (cons 'last-request 0) (cons 'depth 0))))
+    (define (get key) (or (assq-ref state key) 0))
+    (define (set!* key value) (set! state (assq-set! state key value)))
+    (define (bump! key . args)
+      (set!* key (+ (get key) (if (pair? args) (car args) 1))))
+
+    ;; Each host's robots.txt is fetched once and remembered as
+    ;; (rules crawl-delay), so a site with 10,000 pages still costs one read.
+    (define (robots-entry url)
+      (let* ((key (host-key url))
+             (cached (hash-ref robots-cache key)))
+        (or cached
+            (let* ((robots (fetch-robots (or (crawl-origin url) url)
+                                         #:user-agent user-agent
+                                         #:timeout timeout
+                                         #:logger logger))
+                   (rules (robots-for robots user-agent))
+                   (entry (list rules (robots-crawl-delay rules))))
+              (hash-set! robots-cache key entry)
+              entry))))
+
+    (define (allowed? url)
+      (robots-allowed? (car (robots-entry url))
+                       (or (url-path+query url) "/")))
+
+    (define (delay-for url)
+      (max (or sleep-seconds 0) (or (cadr (robots-entry url)) 0)))
+
+    (define (wait-for-slot! seconds)
+      (let* ((delay (or seconds 0))
+             (elapsed (- (monotonic-seconds) (get 'last-request))))
+        (when (and (> delay 0) (< elapsed delay))
+          (sleep-for (- delay elapsed))))
+      (set!* 'last-request (monotonic-seconds)))
+
+    (define (enqueue! url depth)
+      (cond
+       ((or (hash-ref visited url) (hash-ref queued url)) #f)
+       ((and (pair? excluded-patterns) (matches-pattern? excluded-patterns url))
+        (bump! 'filtered)
+        (log-debug logger "Excluded by pattern: ~a" url))
+       ((and (pair? included-patterns)
+             (not (matches-pattern? included-patterns url)))
+        (bump! 'filtered)
+        (log-debug logger "Not matched by an include pattern: ~a" url))
+       (else
+        (hash-set! queued url #t)
+        (enq! frontier (cons url depth)))))
+
+    (define (can-descend? depth)
+      (or (not max-depth) (< depth max-depth)))
+
+    (define (process-page! current depth)
+      (if (and respect-robots? (not (allowed? current)))
+          (begin
+            (bump! 'skipped)
+            (log-debug logger "robots.txt disallows ~a" current))
+          (begin
+            (wait-for-slot! (delay-for current))
+            (handle-response! current depth
+                             (fetch-url current
+                                        #:user-agent user-agent
+                                        #:timeout timeout
+                                        #:retries retries
+                                        #:logger logger)))))
+
+    (define (handle-response! current depth response)
+      (let ((error (assq-ref response 'error))
+            (final (or (assq-ref response 'url) current))
+            (body (assq-ref response 'body))
+            (content-type (assq-ref response 'content-type))
+            (lastmod (assq-ref response 'last-modified))
+            (redirects (or (assq-ref response 'redirects) 0)))
+        (cond
+         (error
+          (bump! 'errors)
+          (record-error! error-kinds error)
+          (log-debug logger "Giving up on ~a (~a)" current error))
+         (else
+          (bump! 'fetched)
+          ;; The final URL is what a search engine should index, and must not
+          ;; be fetched again when another page links to it directly.
+          (when (> redirects 0)
+            (bump! 'redirects redirects)
+            (hash-set! visited final #t))
+          (when body
+            (bump! 'bytes (string-length body)))
+          ;; The page is parsed once, whatever the depth: even when its links
+          ;; are not followed, its noindex and canonical hints still decide
+          ;; what the sitemap says about it.
+          (let* ((html? (and body (html-content-type? content-type)))
+                 (analysis (and html?
+                                (page-analysis #:url final
+                                               #:html body
+                                               #:allow-subdomains?
+                                               allow-subdomains?)))
+                 (canonical (and analysis (assq-ref analysis 'canonical)))
+                 (noindex? (or (noindex-content?
+                                (assq-ref response 'robots-tag))
+                               (and analysis (assq-ref analysis 'noindex))))
+                 ;; A canonical URL is what a search engine should index, and
+                 ;; two spellings of a page share it, so it replaces the URL
+                 ;; that was actually fetched.
+                 (listed (or canonical final)))
+            (when noindex?
+              (bump! 'noindex)
+              (log-debug logger "~a asks not to be indexed; not listed" final))
+            (when (and writer (not noindex?) (not (hash-ref written listed)))
+              (hash-set! written listed #t)
+              (sitemap-add! writer listed lastmod))
+            (when (and analysis (can-descend? depth))
+              (let ((links (assq-ref analysis 'links)))
+                (for-each (lambda (link) (enqueue! link (+ depth 1))) links)
+                (log-debug logger "~a: ~a new links" final (length links)))))
+          (when (and (> progress-every 0)
+                     (= 0 (modulo (get 'fetched) progress-every)))
+            (log-info logger "Crawled ~a pages (~a queued)"
+                      (get 'fetched) (q-length frontier)))))))
+
+    (define (finish reason)
+      (list (cons 'fetched (get 'fetched))
+            (cons 'attempted (get 'attempted))
+            (cons 'errors (get 'errors))
+            (cons 'skipped-robots (get 'skipped))
+            (cons 'noindex (get 'noindex))
+            (cons 'filtered (get 'filtered))
+            (cons 'redirects (get 'redirects))
+            (cons 'bytes (get 'bytes))
+            (cons 'visited (hash-count (lambda (key value) #t) visited))
+            (cons 'error-kinds (hash-map->list cons error-kinds))
+            (cons 'duration (- (monotonic-seconds) started))
+            (cons 'stopped-by reason)))
+
+    (if (not seed)
+        (begin
+          (log-error logger "Not a usable http(s) URL: ~a" (or url parent-domain))
+          (finish 'invalid-seed))
+        (begin
+          (log-info logger "Crawling ~a" seed)
+          ;; The seed is queued directly: it is what the user asked for, and
+          ;; an include pattern that does not match it must not turn a crawl
+          ;; into a no-op.
+          (hash-set! queued seed #t)
+          (enq! frontier (cons seed 0))
+          (let loop ()
+            (cond
+             ((q-empty? frontier) (finish 'done))
+             ((and (> max-urls 0) (>= (get 'attempted) max-urls))
+              (finish 'max-urls))
+             (else
+              (let* ((item (deq! frontier))
+                     (current (car item))
+                     (depth (cdr item)))
+                (hash-set! queued current #t)
+                (unless (hash-ref visited current)
+                  (hash-set! visited current #t)
+                  (bump! 'attempted)
+                  (when (> depth (get 'depth))
+                    (set!* 'depth depth)
+                    (log-debug logger "Depth ~a reached at ~a" depth current))
+                  (process-page! current depth))
+                (loop)))))))))

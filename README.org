@@ -38,6 +38,50 @@ It tells search engines exactly where your content is, saving them time and ensu
 
 For details on the format of the XML, see: https://www.sitemaps.org/protocol.html
 
+** Usage
+
+#+begin_src shell
+araneola --url https://example.org/ --output sitemap.xml
+#+end_src
+
+Run =araneola --help= for the full list.  The options that matter most when
+crawling a site you do not control:
+
+- =--max-urls= and =--max-depth= bound the crawl.
+- =--delay= keeps it polite; a robots.txt =Crawl-delay= is honoured on top.
+- =--exclude= and =--include= take regular expressions matched against
+  canonical URLs, so a search page or a pagination trap is never fetched.
+- =--timeout= and =--retries= decide how patient it is with a slow or
+  flaky host (timeouts, dropped connections, 429 and 5xx are retried with
+  exponential backoff, =Retry-After= included).
+
+What it refuses to do:
+
+- leave the seed host (or, with =--include-subdomains=, its subdomains);
+- fetch anything robots.txt disallows;
+- list a page that asks not to be indexed, whether through
+  =<meta name="robots" content="noindex">= or =X-Robots-Tag=;
+- list the same page twice: =rel="canonical"= and redirects are folded
+  into one URL;
+- publish a half-written sitemap: files are written to =.tmp= and renamed
+  when the crawl finishes, and past 50,000 URLs or 50 MB a sitemap index
+  is written instead.
+
+** Development
+
+The test suite runs against a local fixture site, and needs no network:
+
+#+begin_src shell
+guix shell -m manifest.scm -- guile -L src -L . tests/run-tests.scm
+#+end_src
+
+=scripts/araneola= also runs straight from a checkout, so the wrapper can be
+exercised without building a package:
+
+#+begin_src shell
+guix shell -m manifest.scm -- ./scripts/araneola --url https://example.org/
+#+end_src
+
 ------
 
 

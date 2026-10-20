@@ -42,5 +42,7 @@
                           texinfo
                           guile-lib
                           guile-gnutls
+                          ;; scriba logs through (scriba json), which needs it.
+                          guile-json
                           guile-scriba
                           guile-ares-rs))

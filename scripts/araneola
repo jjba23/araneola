@@ -31,16 +31,37 @@
 # can be explained due to the need of reliably and reproducibly
 # deploying source code and other resources to the store
 # and have access to those at runtime.
+#
+# The option list is deliberately parsed once by `getopt` for the
+# friendly error messages and the --help shortcut, and then handed to
+# the Scheme program unchanged: validating options in two places is how
+# the two definitions drift apart.
 
 set -euo pipefail
 
 script_dir=$(dirname "$0")
 store_dir=$(readlink -f "$script_dir/..")
-scheme_sources_dir="$store_dir/share/guile/site/3.0"
-resources_dir="$store_dir/share/resources"
-scripts_dir="$store_dir/share/scripts"
+
+# Installed through Guix, the sources and resources live under share/.  Run
+# straight from a checkout, they are the checkout's own src/ and resources/
+# directories.  Supporting both means the script can be exercised (and
+# debugged) without building a package first.
+if [[ -d "$store_dir/share/guile/site/3.0" ]]; then
+  scheme_sources_dir="$store_dir/share/guile/site/3.0"
+  resources_dir="$store_dir/share/resources"
+  scripts_dir="$store_dir/share/scripts"
+else
+  scheme_sources_dir="$store_dir/src"
+  resources_dir="$store_dir/resources"
+  scripts_dir="$store_dir/scripts"
+fi
 
 source "$scripts_dir/log.bash"
+
+short_opts="u:o:hd:t:v"
+long_opts="url:,output:,max-urls:,max-depth:,exclude:,include:,delay:,"
+long_opts+="timeout:,retries:,user-agent:,sitemap-base-url:,include-subdomains,"
+long_opts+="no-robots,no-split,verbose,help,resources:"
 
 show_help() {
   cat "$resources_dir/help.txt"
@@ -50,47 +71,53 @@ point_to_help() {
   log_error "Try 'araneola --help' for more information."
 }
 
-parsed_options=$(getopt -n "araneola" -o uh --long url:,help -- "$@")
+if ! parsed_options=$(getopt -n "araneola" -o "$short_opts" -l "$long_opts" -- "$@"); then
+  point_to_help
+  exit 1
+fi
+
+# `eval set --' normalises the options, and the normalised form is what the
+# Scheme program receives.
 eval set -- "$parsed_options"
+passthrough=("$@")
 
 url_arg=""
-
-guile_cmd_args=(
-  "-L" "${scheme_sources_dir}"
-  "-c" "((@(araneola main) main))"
-  "--resources" "${resources_dir}"
-)
-
-while true; do
-  case "${1}" in
+while [ $# -gt 0 ]; do
+  case "$1" in
     -u | --url)
-        url_arg="${2}"
-        [[ -n "${url_arg}" ]] && guile_cmd_args+=("--url" "${url_arg}")
-        shift 2
-        ;;
-  -h | --help)
-    show_help
-    exit 0
-    ;;
-  --)
-    shift
-    break
-    ;;
-  *)
-    log_error "Error: unrecognized option '${1}' !"
-    point_to_help
-    exit 1
-    ;;
+      url_arg="${2:-}"
+      shift 2
+      ;;
+    -h | --help)
+      show_help
+      exit 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      shift
+      ;;
   esac
 done
 
-if [[ (-z "${url_arg}") ]]; then
+if [[ -z "${url_arg}" ]]; then
   log_error "Error: the url option is required!" >&2
   log_error "Use -u / --url" >&2
   point_to_help
   exit 1
 fi
 
+# `--' is not an option the Scheme side needs.
+if [[ ${#passthrough[@]} -gt 0 && "${passthrough[-1]}" == "--" ]]; then
+  unset 'passthrough[-1]'
+fi
 
-# Run Guile application
-exec guile "${guile_cmd_args[@]}"
+# Run the Guile application.  `main' returns the exit status rather than
+# calling `exit' itself, so a partially written crawl is finalised first.
+exec guile \
+  -L "${scheme_sources_dir}" \
+  -c '(exit ((@(araneola main) main)))' \
+  --resources "${resources_dir}" \
+  "${passthrough[@]}"
