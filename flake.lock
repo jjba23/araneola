@@ -1,0 +1,45 @@
+{
+  "nodes": {
+    "guile-scriba-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1792677196,
+        "narHash": "sha256-JF3ZmJPo8mOxo1p5LaAnCLNcpgT84tCzseNLYNpMVqc=",
+        "owner": "jjba23",
+        "repo": "nixpkgs",
+        "rev": "c0cd9aa0d7a75c89de16c75d6c53b2ba2dc7ba48",
+        "type": "github"
+      },
+      "original": {
+        "owner": "jjba23",
+        "ref": "guile-scriba-init",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs": {
+      "locked": {
+        "lastModified": 1792502884,
+        "narHash": "sha256-IoNisKcGbUjdd45qCqywGMCYmZ5EnkxezvLII0FWwNA=",
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "02c087f3fe673c9e317f206a627cb6b910336dbe",
+        "type": "github"
+      },
+      "original": {
+        "owner": "NixOS",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "root": {
+      "inputs": {
+        "guile-scriba-src": "guile-scriba-src",
+        "nixpkgs": "nixpkgs"
+      }
+    }
+  },
+  "root": "root",
+  "version": 7
+}
