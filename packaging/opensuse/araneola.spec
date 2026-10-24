@@ -20,7 +20,7 @@
 %global debug_package %{nil}
 
 Name:           araneola
-Version:        0.0.2
+Version:        0.0.5
 Release:        0
 Summary:        Web crawler and sitemap generator written in Guile Scheme
 License:        AGPL-3.0-or-later

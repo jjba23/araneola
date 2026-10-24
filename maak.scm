@@ -16,13 +16,11 @@
 ;; along with araneola.  If not, see <https://www.gnu.org/licenses/>.
 
 (define-module (maak)
+  #:declarative? #t
   #:use-module (maak maak)
   ;; The container helpers are imported under a prefix because the tasks
   ;; below are named the way maak exposes them on the command line.
-  #:use-module ((maak container) #:prefix ct:)
-  #:use-module (ice-9 textual-ports)
-  #:use-module (ice-9 popen)
-  #:declarative? #t)
+  #:use-module ((maak container) #:prefix ct:))
 
 ;; ====== Maak constants ======
 
@@ -50,18 +48,11 @@
                               (cdr x)))
                     `((SCRIBA_LOGGER . color-console))) " "))
 
-;; ====== Maak abstractions ======
-
-(define (syscall-with-output cmd)
-  (let* ((process (open-input-pipe cmd))
-         (process-output (get-string-all process)))
-    (close-pipe process) process-output))
-
 ;; ====== Maak tasks ======
 
 (define (help)
   "Display program help screen."
-  (program-shell '("araneola --help")))
+  (program-shell (list "araneola" "--help")))
 
 (define (default)
   "Default task to run, call program's help."
@@ -69,26 +60,28 @@
 
 (define (fmt)
   "Format Scheme source code files according to the Guix style guide."
-  ($ '("find . -maxdepth 8 -name '*.scm'" "-type f -exec guix style -f {} \\;")
-     #:verbose? #t))
+  ;; The task below is named `run', so the builtin of that name has to be
+  ;; named in full here rather than reached through the module's bindings.
+  ((@ (maak maak) run)
+   (list "find" "." "-maxdepth" "8" "-name" "*.scm" "-type" "f"
+         "-exec" "guix" "style" "-f" "{}" ";")
+   #:verbose? #t))
 
 (define (repl)
   "Development REPL."
-  (time-machine-manifest-shell '("guile -L ./src"
-                                 "-c '((@ (ares server) run-nrepl-server))'")))
+  (time-machine-manifest-shell (list "guile" "-L" "./src"
+                                     "-c" "'((@ (ares server) run-nrepl-server))'")))
 
 (define (docs)
   "Generate technical API documentation for Maak."
   (delete-file-recursively "doc")
-  (time-machine-manifest-shell (list (~ "documenta api ./src/~a && "
-                                        project-name)
-                                     (~ "texi2any -v --html --css-ref=~a"
-                                        api-docs-css-url)
+  (time-machine-manifest-shell (list "documenta" "api" (~ "./src/~a" project-name)))
+  (time-machine-manifest-shell (list "texi2any" "-v" "--html"
+                                     (~ "--css-ref=~a" api-docs-css-url)
                                      "./doc/api/index.texi"))
   (mv "./index" "./doc/api-dist"))
 
 (define (deploy)
-  (run)
   (docs)
   ;; Deploy ARANEOLA
   (mkdir-p (~ "~a/araneola" deploy-dir))
@@ -98,51 +91,58 @@
   ;; Deploy API docs
   (remkdir-p (~ "~a/api-docs/~a" deploy-dir project-name))
   (mv "doc/api-dist/*"
-      (~ "~a/api-docs/~a" deploy-dir project-name))
+      (~ "~a/api-docs/~a" deploy-dir project-name)
+      #:expand? #t)
   (delete-file-recursively "doc"))
 
 (define (package-docker)
-  "Create a Docker image for ARANEOLA."
-  ($ '("guix pack --file=./guix.scm" "--format=docker" "--image-tag=araneola"
-       "-S /bin=bin" "bash coreutils util-linux-with-udev guile")
-     #:verbose? #t))
+  "Build a Docker image for ARANEOLA."
+  (guix-pack '()
+             #:format "docker"
+             #:image-tag "araneola"
+             #:symlinks '("/bin=bin")
+             #:extra-packages '("bash" "coreutils" "util-linux-with-udev" "guile")
+             #:verbose? #t))
 
 (define (push-docker-latest)
   "Push the latest locally generated Docker image to Dockerhub."
-  ($ (list (~ "podman push localhost/~a:latest" project-name)
-           (~ "docker.io/jjba23/~a:latest" project-name))
-     #:verbose? #t))
+  (ct:container (list "push"
+                      (~ "localhost/~a:latest" project-name)
+                      (~ "docker.io/jjba23/~a:latest" project-name))
+                #:verbose? #t))
 
 (define (push-docker-tag)
   "Push the locally generated Docker image to Dockerhub."
   (git-fetch "--all")
-  (let* ((latest-tag (syscall-with-output "git describe --tags --abbrev=0")))
-    ($ (list (~ "podman push localhost/~a:latest" project-name)
-             (~ "docker.io/jjba23/~a:~a" project-name latest-tag))
-       #:verbose? #t)))
+  (let ((latest-tag (git-describe-tag)))
+    (ct:container (list "push"
+                        (~ "localhost/~a:latest" project-name)
+                        (~ "docker.io/jjba23/~a:~a" project-name latest-tag))
+                  #:verbose? #t)))
 
 (define (dev-run)
-  (time-machine-manifest-shell (list "env" scriba-logger-options
-                                "guile -L ./src -c '((@(araneola main) main))'"
-                                "--resources ./resources" "--url"
-                                (sitemap-domain))
+  (time-machine-manifest-shell (list "guile" "-L" "./src"
+                                     "-c" "'((@(araneola main) main))'"
+                                     "--resources" "./resources"
+                                     "--url" (sitemap-domain))
+                               #:env (list scriba-logger-options)
                                #:verbose? #t))
 
 (define (run)
-  (time-machine-program-shell (list "env" scriba-logger-options "araneola" "--url"
-                                    (sitemap-domain))))
+  (time-machine-program-shell (list "araneola" "--url" (sitemap-domain))
+                              #:env (list scriba-logger-options)))
 
 (define (hot-reload)
   "Hot-reloading developer's setup."
-  (manifest-shell (list scriba-logger-options
-                        "watchexec 'maak run'"
+  (manifest-shell (list "watchexec" "'maak run'"
                         "--clear"
-                        (~ "--exts ~a"
-                           (string-join (map symbol->string
-                                             hot-reload-file-types) ","))
+                        "--exts"
+                        (string-join (map symbol->string
+                                          hot-reload-file-types) ",")
                         "--on-busy-update=restart"
-                        "--shell bash"
-                        "--watch .")))
+                        "--shell" "bash"
+                        "--watch" ".")
+                  #:env (list scriba-logger-options)))
 
 (define (hr)
   (hot-reload))
