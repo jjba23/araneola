@@ -38,7 +38,7 @@ makedepends=(
 )
 
 source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('1b67e6a0abe4624c19aac02a2b54c7851179b950f566362a680dd40a9570f55a')
+sha256sums=('337b56e5bb31a0715b48cd3f9a263d2b5f4104746c179f0f93b04f9fcacd272a')
 
 # scriba is produced by the same packaging batch; build it first.
 
