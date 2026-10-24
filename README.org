@@ -11,12 +11,18 @@ Araneola is a [🚧 Work in Progress] high-performance web crawler and sitemap g
 If you like my work, please support me by [[https://bmc.link/jjbigorra][buying me a cup of coffee ☕]] so I can continue with a lot of motivation.
 
 ** What is a Web Crawler?
+:PROPERTIES:
+:CUSTOM_ID: what-is-a-web-crawler
+:END:
 
 A web crawler (also known as a spider or bot) is an automated software program that systematically browses the internet to discover and index content. Think of it as an automated explorer that scans and jumps from page to page finding, following and using hyperlinks.
 
 Search engines like DuckDuckGo, Ecosia, Google and Bing use massive fleets of crawlers to continuously copy and index the entire web so you can find things instantly when you search.
 
 ** What is a Sitemap?
+:PROPERTIES:
+:CUSTOM_ID: what-is-a-sitemap
+:END:
 A sitemap is a file (typically written in XML format) that acts as a blueprint or master directory for a website. It explicitly lists all the important pages, videos, and files on a site, along with metadata about them (like when a page was last updated).
 
 #+begin_src xml
@@ -39,6 +45,9 @@ It tells search engines exactly where your content is, saving them time and ensu
 For details on the format of the XML, see: https://www.sitemaps.org/protocol.html
 
 ** Usage
+:PROPERTIES:
+:CUSTOM_ID: usage
+:END:
 
 #+begin_src shell
 araneola --url https://example.org/ --output sitemap.xml
@@ -68,6 +77,9 @@ What it refuses to do:
   is written instead.
 
 ** Development
+:PROPERTIES:
+:CUSTOM_ID: development
+:END:
 
 The test suite runs against a local fixture site, and needs no network:
 
@@ -85,7 +97,85 @@ guix shell -m manifest.scm -- ./scripts/araneola --url https://example.org/
 ------
 
 
+* Ways to install
+:PROPERTIES:
+:CUSTOM_ID: ways-to-install
+:END:
+
+/Four routes to the same 0.0.2, from the most automated to the most manual.  They all build the tag this README documents./
+
+** From the Guix channel
+:PROPERTIES:
+:CUSTOM_ID: from-the-guix-channel
+:END:
+*GNU Guix* is the functional package manager this project is developed with: a build is a pure function of its inputs, so the same recipe gives the same result everywhere, and an upgrade that goes wrong can be rolled back.
+
+The jointhefreeworld channel carries ~araneola~ at 0.0.2, so a checkout of the channel is enough — no package definition to write:
+
+#+begin_src shell
+git clone https://codeberg.org/jjba23/guix-jointhefreeworld.git
+guix install -L ./guix-jointhefreeworld araneola
+#+end_src
+
+Add the channel to ~$HOME/.config/guix/channels.scm~ (the channel's README has the four lines) and a plain ~guix install araneola~ keeps working on every later ~guix pull~.
+
+** From the Nix flake
+:PROPERTIES:
+:CUSTOM_ID: from-the-nix-flake
+:END:
+*Nix* offers the same declarative, reproducible model with its own language, its own store and a binary cache, and it is a natural fit if the rest of your machine is already described in Nix.
+
+The jointhefreeworld flake builds this project with this repository's own expression, so the package cannot drift from the source:
+
+#+begin_src shell
+nix build github:jjba23/nix-jointhefreeworld#araneola
+#+end_src
+
+The same attribute is available as an overlay, so ~pkgs.jointhefreeworld.araneola~ works inside a NixOS or home-manager configuration too.
+
+** As a container image
+:PROPERTIES:
+:CUSTOM_ID: as-a-container-image
+:END:
+*Podman or Docker* is the route that puts nothing on the host: the ~Dockerfile~ in this repository builds the project in a builder stage and copies only what it installed into a runtime stage, so the image is small and the host keeps its own toolchain untouched.
+
+#+begin_src shell
+podman build -t araneola .   # docker build -t araneola . also works
+podman run --rm -it araneola
+#+end_src
+
+The image's entry point is Guile, with araneola on its load path, which makes it useful for a quick try and for reproducing a bug on a clean system.
+
+** As a distribution package
+:PROPERTIES:
+:CUSTOM_ID: as-a-distribution-package
+:END:
+*Debian, openSUSE and Arch* each get the project through their own package manager.  Packaging lives in this repository under ~packaging/~ and is pinned to the same release tag, so the recipes and the sources they build are versioned together.
+
+None of the three archives ships araneola yet, so these are recipes to build rather than packages to install from a mirror:
+
+| Distribution   | Package    | How to build it                                                                     |
+|----------------+------------+-------------------------------------------------------------------------------------|
+| Debian, Ubuntu | ~araneola~ | copy ~packaging/debian~ to the repository root, then ~dpkg-buildpackage -us -uc -b~ |
+| openSUSE       | ~araneola~ | ~osc build~ with ~packaging/opensuse~                                               |
+| Arch           | ~araneola~ | ~makepkg -si~ in ~packaging/arch~                                                   |
+
+Each recipe carries its own dependency list, so a missing library fails the build with its name rather than producing a package that cannot load.
+
+** Which one?
+:PROPERTIES:
+:CUSTOM_ID: which-one
+:END:
+- *Guix* if you want the toolchain the project is tested with, and the ability to roll back a bad upgrade.
+- *Nix* if the rest of your machine is already declarative; the flake pins nixpkgs and gives you a binary cache.
+- *Container* if you only want to try the release, or reproduce a report on a machine that has nothing installed.
+- *Distribution package* if you want the project managed by the same tool as the rest of your system, with its licence, manual page and launcher in the usual places.
+
+
 * Licensing
+:PROPERTIES:
+:CUSTOM_ID: licensing
+:END:
 
 araneola and all of its source code are free software, licensed under the GNU Affero General Public License v3 (or newer at your convenience).
 
@@ -98,6 +188,9 @@ https://www.gnu.org/licenses/fdl-1.3.html
 ----------------------
 
 * AI Policy
+:PROPERTIES:
+:CUSTOM_ID: ai-policy
+:END:
 
 This project adheres to the [[https://jointhefreeworld.org/blog/articles/personal/jointhefreeworld-ai-policy/index.html][jointhefreeworld AI (Artificial Intelligence) policy]].
 
@@ -110,6 +203,9 @@ We require a human in the loop for all contributions. The use of autonomous AI a
 -----------
 
 * Code of conduct
+:PROPERTIES:
+:CUSTOM_ID: code-of-conduct
+:END:
 
 This project adheres to the jointhefreeworld code of conduct. Find it here:
 
@@ -120,6 +216,9 @@ In summary, we foster an inclusive, respectful, and cooperative environment for 
 ---------
 
 * TODO: Scan images in page and add to Image sitemaps
+:PROPERTIES:
+:CUSTOM_ID: todo-scan-images-in-page-and-add-to-image-sitemaps
+:END:
 
 Image sitemaps are a way of telling Google about other images on your site, especially those that we might not otherwise find (such as images your site reaches with JavaScript code). You can create a separate image sitemap or add image sitemap tags to your existing sitemap; either approach is equally fine for Google.
 
@@ -168,6 +267,9 @@ In some cases, the image URL may not be on the same domain as your main site. Th
 
 
 * Getting Started
+:PROPERTIES:
+:CUSTOM_ID: getting-started
+:END:
 
 
 The easiest way to run Araneola predictably is by using *GNU Guix*. This ensures all dependencies (such as Guile, guile-lib, guile-scriba) are locked to the correct revisions but feel free to use the source code at will.
@@ -185,11 +287,17 @@ env SCRIBA_LOGGER=color-console guile -L ./src -c '((@(araneola main) main))'
 #+end_src
 
 *** CLI Options
+:PROPERTIES:
+:CUSTOM_ID: cli-options
+:END:
 
 -  =-u, --url=: The target root domain to begin crawling (protocols will automatically default to =https://= if left unspecified).
 -  =-r, --resources=: Specifies the path directory to look for local assets or configuration resources.
 
 * Logger Configuration
+:PROPERTIES:
+:CUSTOM_ID: logger-configuration
+:END:
 
 Araneola uses the powerful [[https://codeberg.org/jjba23/scriba][Scriba structured logging framework for Lisp (Guile Scheme)]] so check out the configuration options and possibilities there.
 
@@ -203,6 +311,9 @@ Araneola uses the powerful [[https://codeberg.org/jjba23/scriba][Scriba structur
 -------
 
 * On Reproducibility: Why GNU Guix?
+:PROPERTIES:
+:CUSTOM_ID: on-reproducibility-why-gnu-guix
+:END:
 
 A build should never fail because "it worked on my machine." Reliable software development requires explicit, bit-for-bit reproducibility and a functional approach to package management and system deployment.
 
