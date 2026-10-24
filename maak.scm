@@ -146,3 +146,13 @@
 
 (define (dev)
   (hot-reload))
+
+;; ====== Container tasks ======
+
+(define (container-build)
+  "Build the container image for araneola."
+  ($ '("podman build -t araneola .")))
+
+(define (container-run)
+  "Run the container image for araneola."
+  ($ '("podman run --rm -it araneola:latest")))

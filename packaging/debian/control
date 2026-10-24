@@ -1,0 +1,32 @@
+Source: araneola
+Section: web
+Priority: optional
+Maintainer: Josep Bigorra <jjbigorra@gmail.com>
+# scriba is produced by the same packaging batch; build it first.
+Build-Depends:
+ debhelper-compat (= 13),
+ guile-3.0,
+ guile-3.0-dev,
+ pkg-config,
+ guile-library,
+ scriba
+Standards-Version: 4.6.2
+Homepage: https://codeberg.org/jjba23/araneola
+Vcs-Git: https://codeberg.org/jjba23/araneola.git
+Vcs-Browser: https://codeberg.org/jjba23/araneola
+Rules-Requires-Root: no
+
+Package: araneola
+Architecture: any
+Depends:
+ ${misc:Depends},
+ ${shlibs:Depends},
+ guile-3.0,
+ guile-library,
+ scriba,
+ bash,
+ coreutils
+Description: Web crawler and sitemap generator written in Guile Scheme
+ Araneola crawls a web site from a starting URL, follows the links it finds
+ and writes an XML sitemap. It honours robots.txt rules, can stay on one host
+ and reports what it visited.

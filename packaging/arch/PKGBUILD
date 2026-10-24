@@ -1,0 +1,106 @@
+# araneola
+
+# Copyright © 2026 Josep Bigorra <jjbigorra@gmail.com>
+
+# araneola is free software: you can redistribute it and/or modify it under
+# the terms of the GNU Affero General Public License as published by the Free
+# Software Foundation, either version 3 of the License, or (at your
+# option) any later version.
+#
+# araneola is distributed in the hope that it will be useful, but WITHOUT
+# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+# FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License
+# for more details.
+#
+# You should have received a copy of the GNU Affero General Public License along
+# with araneola. If not, see <https://www.gnu.org/licenses/>.
+
+# Maintainer: Josep Bigorra <jjbigorra@gmail.com>
+pkgname=araneola
+pkgver=0.0.2
+pkgrel=1
+pkgdesc="Web crawler and sitemap generator written in Guile Scheme"
+arch=('any')
+url="https://codeberg.org/jjba23/araneola"
+license=('AGPL-3.0-or-later')
+
+depends=(
+  'guile'
+  'bash'
+  'coreutils'
+  'guile-lib'
+  'scriba'
+)
+
+makedepends=(
+  'guile'
+  'pkgconf'
+)
+
+source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+sha256sums=('1b67e6a0abe4624c19aac02a2b54c7851179b950f566362a680dd40a9570f55a')
+
+# scriba is produced by the same packaging batch; build it first.
+
+# Upstream reads resources and the log helper from the generic
+# share/resources and share/scripts; several of these packages
+# would clash there, so both move under share/araneola/.
+
+# Guile looks for byte-compiled modules under the site-ccache directory,
+# which differs between distributions, so ask Guile's pkg-config file
+# instead of hard-coding a path.
+_site_dir() {
+  pkg-config --variable=sitedir guile-3.0 2>/dev/null \
+    || echo /usr/share/guile/site/3.0
+}
+
+_compiled_dir() {
+  pkg-config --variable=siteccachedir guile-3.0 2>/dev/null \
+    || echo /usr/lib/guile/3.0/site-ccache
+}
+
+build() {
+  cd "$srcdir/araneola"
+
+  # Byte-compile every module, mirroring the source tree under a staging
+  # directory that package() copies into the compiled site directory.
+  rm -rf "$srcdir/ccache"
+  mkdir -p "$srcdir/ccache/araneola"
+
+  while IFS= read -r scm_file; do
+    rel_path="${scm_file#src/}"
+    go_file="$srcdir/ccache/${rel_path%.scm}.go"
+    mkdir -p "$(dirname "$go_file")"
+    guild compile -L src -o "$go_file" "$scm_file"
+  done < <(find src/araneola -name '*.scm')
+}
+
+check() {
+  cd "$srcdir/araneola"
+
+  guile -L src -L . tests/run-tests.scm
+}
+
+package() {
+  cd "$srcdir/araneola"
+
+  # The launcher resolves its modules and resources relative to its
+  # own prefix, so the installed layout below is what it expects.
+  install -Dm755 scripts/araneola "$pkgdir/usr/bin/araneola"
+  sed -i 's|share/resources|share/araneola/resources|g; s|share/scripts|share/araneola/scripts|g' "$pkgdir/usr/bin/araneola"
+
+  site_dir="$(_site_dir)"
+  install -d "$pkgdir${site_dir}/araneola"
+  cp -r src/araneola/. "$pkgdir${site_dir}/araneola/"
+
+  ccache_dir="$(_compiled_dir)"
+  install -d "$pkgdir${ccache_dir}/araneola"
+  cp -r "$srcdir/ccache/araneola/." "$pkgdir${ccache_dir}/araneola/"
+
+  install -d "$pkgdir/usr/share/araneola/resources"
+  cp -r resources/. "$pkgdir/usr/share/araneola/resources/"
+  install -Dm644 scripts/log.bash "$pkgdir/usr/share/araneola/scripts/log.bash"
+
+  install -Dm644 COPYING "$pkgdir/usr/share/licenses/$pkgname/COPYING"
+  install -Dm644 README.org "$pkgdir/usr/share/doc/$pkgname/README.org"
+}
