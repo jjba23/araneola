@@ -33,6 +33,11 @@
              (gnu packages autotools)
              (gnu packages rust-apps)
              (gnu packages tls)
+             ;; The channel pinned in channels.scm carries the release the
+             ;; collection is built against; the prefix keeps it apart from the
+             ;; older copies Guix itself carries.
+             ((jointhefreeworld packages guile)
+              #:prefix jtf:)
              ((guix licenses)
               #:prefix license:))
 
@@ -44,5 +49,5 @@
                           guile-gnutls
                           ;; scriba logs through (scriba json), which needs it.
                           guile-json-4
-                          guile-scriba
+                          jtf:guile-scriba
                           guile-ares-rs))

@@ -27,7 +27,11 @@
              (gnu packages bash)
              (gnu packages guile)
              (gnu packages tls)
-             (gnu packages guile-xyz))
+             (gnu packages guile-xyz)
+             ;; The release the channel in channels.scm pins, imported with a
+             ;; prefix so it cannot be confused with Guix's older copy.
+             ((jointhefreeworld packages guile)
+              #:prefix jtf:))
 
 (define %source-dir
   (dirname (current-filename)))
@@ -64,7 +68,7 @@
                 `("GUILE_LOAD_COMPILED_PATH" ":" prefix
                   (,(getenv "GUILE_LOAD_COMPILED_PATH")))))))))
     (build-system guile-build-system)
-    (propagated-inputs (list guile-scriba))
+    (propagated-inputs (list jtf:guile-scriba))
     (native-inputs (list guile-3.0))
     (inputs (list guile-3.0 bash-minimal guile-lib guile-gnutls))
     (synopsis "")
