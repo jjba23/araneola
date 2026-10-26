@@ -3,11 +3,11 @@
     "guile-scriba-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1792677196,
-        "narHash": "sha256-JF3ZmJPo8mOxo1p5LaAnCLNcpgT84tCzseNLYNpMVqc=",
+        "lastModified": 1793017638,
+        "narHash": "sha256-BDWT9YmE1HHnEbC1tn57lGSNOOGURC8lb+zXax3ATnU=",
         "owner": "jjba23",
         "repo": "nixpkgs",
-        "rev": "c0cd9aa0d7a75c89de16c75d6c53b2ba2dc7ba48",
+        "rev": "6d47123d076598907d7089031236252dc787bd35",
         "type": "github"
       },
       "original": {
