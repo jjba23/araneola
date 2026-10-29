@@ -3,7 +3,7 @@ Araneola
     Web crawler and sitemap generator
 
     See more at: https://codeberg.org/jjba23/araneola
-    Software licensed under the GNU AGPL v3 or newer.
+    Software licensed under the MIT License.
 
 USAGE: araneola --url URL [OPTIONS]
 

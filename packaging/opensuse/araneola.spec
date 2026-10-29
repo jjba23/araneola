@@ -23,7 +23,7 @@ Name:           araneola
 Version:        0.0.5
 Release:        0
 Summary:        Web crawler and sitemap generator written in Guile Scheme
-License:        AGPL-3.0-or-later
+License:        MIT
 URL:            https://codeberg.org/jjba23/araneola
 Source0:        %{name}-%{version}.tar.gz
 BuildRequires:  pkgconfig(guile-3.0)
@@ -90,7 +90,7 @@ install -D -m 0644 scripts/log.bash "%{buildroot}%{_datadir}/araneola/scripts/lo
 guile -L src -L . tests/run-tests.scm
 
 %files
-%license COPYING
+%license LICENSE
 %doc README.org
 %{_bindir}/araneola
 %dir %{_datadir}/guile
