@@ -6,6 +6,9 @@
 [[https://jointhefreeworld.org/ggg/dist/scheme-guile.svg]] [[https://jointhefreeworld.org/ggg/dist/gnu-guix.svg]] [[https://jointhefreeworld.org/ggg/dist/maak.svg]]
 [[https://jointhefreeworld.org/ggg/dist/license-mit.svg]]    [[https://img.shields.io/badge/License-CC_BY_4.0-lightgrey.svg]]
 
+#+attr_html: :width 160 :alt Araneola logo
+[[file:logo.svg]]
+
 Araneola is a high-performance web crawler and sitemap generator written purely in Lisp (GNU Guile Scheme) 🕷️🕸️
 
 If you like my work, please support me by [[https://bmc.link/jjbigorra][buying me a cup of coffee ☕]] so I can continue with a lot of motivation.
@@ -96,7 +99,6 @@ guix shell -m manifest.scm -- ./scripts/araneola --url https://example.org/
 
 ------
 
-
 * Ways to install
 :PROPERTIES:
 :CUSTOM_ID: ways-to-install
@@ -170,7 +172,6 @@ Each recipe carries its own dependency list, so a missing library fails the buil
 - *Nix* if the rest of your machine is already declarative; the flake pins nixpkgs and gives you a binary cache.
 - *Container* if you only want to try the release, or reproduce a report on a machine that has nothing installed.
 - *Distribution package* if you want the project managed by the same tool as the rest of your system, with its licence, manual page and launcher in the usual places.
-
 
 * Licensing
 :PROPERTIES:
@@ -258,15 +259,12 @@ The URL of the image.
 
 In some cases, the image URL may not be on the same domain as your main site. This is fine, as long as you verify both domains in Search Console. If, for example, you use a content delivery network such as Google Sites to host your images, make sure that the hosting site is verified in Search Console. In addition, make sure that your robots.txt file doesn't disallow the crawling of any content you want indexed.
 
-
 ---------------------
-
 
 * Getting Started
 :PROPERTIES:
 :CUSTOM_ID: getting-started
 :END:
-
 
 The easiest way to run Araneola predictably is by using *GNU Guix*. This ensures all dependencies (such as Guile, guile-lib, guile-scriba) are locked to the correct revisions but feel free to use the source code at will.
 
@@ -296,7 +294,6 @@ env SCRIBA_LOGGER=color-console guile -L ./src -c '((@(araneola main) main))'
 :END:
 
 Araneola uses the powerful [[https://codeberg.org/jjba23/scriba][Scriba structured logging framework for Lisp (Guile Scheme)]] so check out the configuration options and possibilities there.
-
 
 -------
 
