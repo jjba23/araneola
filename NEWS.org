@@ -3,6 +3,18 @@
 #+email: jjbigorra@gmail.com
 #+options: toc:nil
 
+* 0.2.8 (2026-11-21)
+
+** Changed
+
+- =channels.scm= pins the jointhefreeworld revision that carries
+  guile-dokgen 0.9.1.
+
+** Fixed
+
+- The API links point at =index.html=, the one page the reference has been
+  since the dokgen migration, rather than at =.../API.html=.
+
 * 0.2.7 (2026-11-21)
 
 ** Changed
