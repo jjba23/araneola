@@ -37,7 +37,10 @@
                           ;; name is resolved against the channels the
                           ;; manifest is read with.
                           (specification->package "guile-dokgen")
-                          texinfo
+                          ;; The highest Texinfo, not the bare `texinfo'
+                          ;; binding (6.8): dokgen's stylesheet and script
+                          ;; target the definition structure 7.x emits.
+                          (specification->package "texinfo")
                           guile-lib
                           guile-gnutls
                           ;; scriba logs through (scriba json), which needs it.
