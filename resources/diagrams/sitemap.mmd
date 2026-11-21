@@ -1,0 +1,8 @@
+flowchart TD
+  urls[URLs stream in] --> limit{beyond 50,000 URLs or 50 MB?}
+  limit -- no --> one[sitemap.xml]
+  limit -- yes --> index[sitemap index]
+  index --> part[sitemap-1.xml, sitemap-2.xml, ...]
+  one --> tmp[.tmp file]
+  part --> tmp
+  tmp --> rename[rename into place]

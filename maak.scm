@@ -6,6 +6,7 @@
 (define-module (maak)
   #:declarative? #t
   #:use-module (maak maak)
+  #:use-module (ice-9 ftw)
   #:use-module ((ice-9 rdelim) #:select (read-line))
   ;; The container helpers are imported under a prefix because the tasks
   ;; below are named the way maak exposes them on the command line.
@@ -61,14 +62,84 @@
   (time-machine-manifest-shell (list "guile" "-L" "./src"
                                      "-c" "'((@ (ares server) run-nrepl-server))'")))
 
+(define (diagrams)
+  "Render every mermaid source under resources/diagrams to the SVG beside it.
+
+The SVGs are committed, because the README shows them and a checkout should
+read without a renderer installed.  This task is how they are made again
+after a source changes; it needs mermaid-cli (mmdc) and a browser, which is
+why `build' does not run it.
+
+PUPPETEER_EXECUTABLE_PATH points mmdc at a browser it did not download."
+  (for-each
+   (lambda (name)
+     (let* ((source (in-vicinity "resources/diagrams" name))
+            (image (string-append (string-drop-right source 4) ".svg")))
+       ;; The task named `run' below is the crawler, so the library's shell
+       ;; helper is named in full rather than reached through the module.
+       ((@ (maak maak) run)
+        (list "mmdc" "-i" source "-o" image
+              "--backgroundColor" "transparent")
+        #:verbose? #t)))
+   (scandir "resources/diagrams"
+            (lambda (name)
+              (and (not (member name '("." "..")))
+                   (string-suffix? ".mmd" name))))))
+
+(define (test)
+  "Run Araneola's test suite against its in-process fixture site.
+
+The suite starts its own web server on a loopback port and a black-hole
+server for the timeout cases, so it needs no network and leaves nothing
+behind."
+  (time-machine-manifest-shell
+   (list "guile" "-L" "./src" "-L" "." "./tests/run-tests.scm")
+   #:verbose? #t))
+
 (define (docs)
-  "Generate technical API documentation for Maak."
+  "Generate Araneola's API reference and render it as HTML.
+
+The reference is extracted from the loaded modules by guile-dokgen, so a
+name a caller can reach is a name the manual documents.  A mermaid fence in
+a commentary or a docstring is drawn with `mmdc' when that renderer is on
+PATH and written as source when it is not, so the manual never loses a
+diagram.
+
+The stylesheet and the script dokgen writes beside the chapter are what make
+the page readable, so they are copied beside the pages that point at them."
   (delete-file-recursively "doc")
-  (time-machine-manifest-shell (list "documenta" "api" (~ "./src/~a" project-name)))
-  (time-machine-manifest-shell (list "texi2any" "-v" "--html"
-                                     (~ "--css-ref=~a" api-docs-css-url)
-                                     "./doc/api/index.texi"))
-  (mv "./index" "./doc/api-dist"))
+  (time-machine-manifest-shell
+   (list "dokgen" "api"
+         "--destination" "doc/api"
+         (~ "./src/~a" project-name))
+   #:verbose? #t)
+  (mkdir-p "doc/api-dist")
+  (time-machine-manifest-shell
+   (list "texi2any" "-v" "--html" "--no-split"
+         (~ "--css-ref=~a" api-docs-css-url)
+         ;; Texinfo finds a diagram where it is told to look, not where the
+         ;; chapter that names it lives.
+         "-I" "doc/api"
+         ;; The site stylesheet is already in the head; these two come after
+         ;; it, because they are what turn the reference into cards.
+         "-c" (shell-quote
+               (string-append
+                "EXTRA_HEAD="
+                "<link rel=\"stylesheet\" href=\"dokgen.css\">"
+                "<script src=\"dokgen.js\" defer></script>"))
+         ;; One page named index.html: the reference is read as one
+         ;; searchable list, and the deployed directory keeps a stable
+         ;; entry point whatever the chapter inside is called.
+         "-o" "doc/api-dist/index.html"
+         "./doc/api/index.texi")
+   #:verbose? #t)
+  (for-each (lambda (asset)
+              (when (file-exists? (~ "doc/api/~a" asset))
+                (cp (~ "doc/api/~a" asset) "doc/api-dist"
+                    #:force? #t #:verbose? #t)))
+            '("dokgen.css" "dokgen.js"))
+  (when (file-exists? "doc/api/diagrams")
+    (cp "doc/api/diagrams" "doc/api-dist" #:force? #t #:verbose? #t)))
 
 (define (deploy)
   (docs)

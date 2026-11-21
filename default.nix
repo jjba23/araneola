@@ -24,7 +24,7 @@
 
 stdenv.mkDerivation {
   pname = "araneola";
-  version = "0.0.5";
+  version = "0.2.7";
 
   src = ./.;
 

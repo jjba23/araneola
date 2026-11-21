@@ -25,6 +25,21 @@
 ;;; - robots.txt is consulted per host, and a slow host's Crawl-delay is
 ;;;   folded into the politeness delay.
 ;;;
+;;; ```mermaid
+;;; flowchart LR
+;;;   seed[seed URL] --> frontier[frontier queue]
+;;;   frontier --> scope{in scope?}
+;;;   scope -- no --> drop[drop]
+;;;   scope -- yes --> robots[robots.txt]
+;;;   robots --> fetch[fetch page]
+;;;   fetch --> links[extract links]
+;;;   links --> filter{include / exclude}
+;;;   filter -- keep --> frontier
+;;;   filter -- drop --> drop
+;;;   fetch --> sitemap[sitemap entry]
+;;;   sitemap --> write[write sitemap.xml]
+;;; ```
+;;;
 ;;; Code:
 
 (define-module (araneola araneola)

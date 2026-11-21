@@ -1,3 +1,11 @@
+araneola (0.2.7-1) unstable; urgency=medium
+
+  * Generate the API reference with guile-dokgen.
+  * Pin the latest Guix and jointhefreeworld channels.
+  * Add a test task, a diagrams task and the README's workflow diagrams.
+
+ -- Josep Bigorra <jjbigorra@gmail.com>  Sat, 21 Nov 2026 15:40:00 +0000
+
 araneola (0.2.5-1) unstable; urgency=medium
 
   * Build against the jointhefreeworld collection at v1.0.4.

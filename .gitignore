@@ -2,3 +2,5 @@
 .nrepl-port
 doc
 sitemap.xml
+# Test suites write one log per suite beside the tree.
+*.log

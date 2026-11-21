@@ -5,6 +5,7 @@
 
 (use-modules (guix packages)
              (gnu)
+             (gnu packages)
              (guix utils)
              (guix git-download)
              (guix download)
@@ -31,7 +32,11 @@
 
 (packages->manifest (list guile-3.0
                           watchexec
-                          guile-documenta
+                          ;; guile-dokgen comes from the jointhefreeworld
+                          ;; channel, which is why channels.scm pins it: the
+                          ;; name is resolved against the channels the
+                          ;; manifest is read with.
+                          (specification->package "guile-dokgen")
                           texinfo
                           guile-lib
                           guile-gnutls
