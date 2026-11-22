@@ -9,6 +9,8 @@
 #+attr_html: :width 160 :alt Araneola logo
 [[file:logo.svg]]
 
+- 📖 *API reference:* [[https://jointhefreeworld.org/api-docs/araneola/index.html][Araneola API reference]]
+
 Araneola is a high-performance web crawler and sitemap generator written purely in Lisp (GNU Guile Scheme) 🕷️🕸️
 
 If you like my work, please support me by [[https://bmc.link/jjbigorra][buying me a cup of coffee ☕]] so I can continue with a lot of motivation.

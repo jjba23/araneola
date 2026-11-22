@@ -33,8 +33,8 @@
         (name 'jointhefreeworld)
         (url "https://github.com/jjba23/guix-jointhefreeworld")
         (branch "trunk")
-        ;; The release this project is built against: scriba 0.5.1, guile-dokgen
-        ;; 0.9.2, and the rest of the collection, at the same revision.
+        ;; The release this project is built against: guile-dokgen 0.11.0 and
+        ;; the rest of the collection, at the same revision.
         (commit "fafafe4e22b43dc89037facf8bd4c8977c4c7146")
         (introduction
          (make-channel-introduction
