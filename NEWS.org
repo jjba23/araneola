@@ -3,6 +3,14 @@
 #+email: jjbigorra@gmail.com
 #+options: toc:nil
 
+* 0.2.12 (2026-11-26)
+
+** Changed
+
+- The pinned Guix channel carries guile-dokgen 0.12.0: the published API
+  reference folds the source behind each definition into a panel a reader
+  opens, and reads on a quieter page with translucent surfaces.
+
 * 0.2.9 (2026-11-21)
 
 ** Fixed
