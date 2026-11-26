@@ -35,7 +35,7 @@
         (branch "trunk")
         ;; The release this project is built against: guile-dokgen 0.11.0 and
         ;; the rest of the collection, at the same revision.
-        (commit "fafafe4e22b43dc89037facf8bd4c8977c4c7146")
+        (commit "59d58acbd759cb7952dcbfade1045d5318c24344")
         (introduction
          (make-channel-introduction
           "b0ac3f05075d7959860fc9e1db5871acddea3986"
